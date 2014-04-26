@@ -6,24 +6,10 @@ LD29 = function(canvas) {
 
 LD29.HALF_FOV = 0.25;
 
-LD29.CUBE_VERTICES = [-0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5, -0.5, -0.5,
-                       0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  0.5, -0.5,
-                       0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5,  0.5,
-                       0.5, -0.5,  0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  0.5,
-                       0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5, -0.5,  0.5,
-                      -0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5,  0.5,
-                      -0.5, -0.5,  0.5, -0.5,  0.5,  0.5, -0.5, -0.5, -0.5,
-                      -0.5, -0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5,
-                      -0.5, -0.5,  0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
-                      -0.5, -0.5, -0.5,  0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
-                      -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5, -0.5,
-                      -0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5];
-
 LD29.prototype.init = function() {
   this.initGL();
   this.initTextures();
-  this.initPrograms();
-  this.initBuffers();
+  this.initRenderers();
   this.initState();
 }
 
@@ -41,59 +27,8 @@ LD29.prototype.initTextures = function() {
   this.voxelMap = new LD29.Texture(this.gl, "voxelmap.png");
 }
 
-LD29.prototype.initPrograms = function() {
-  // Loosely based on algorithm at http://prideout.net/blog/?p=64
-  this.program = new LD29.Program(
-    this.gl,
-    ["uniform mat4 matrix;",
-     "attribute vec3 pos;",
-     "varying highp vec3 near;",
-     "void main() {",
-     "  gl_Position = matrix * vec4(pos, 1);",
-     "  near = pos;",
-     "}"],
-    ["//uniform highp mat4 matrix;",
-     "uniform highp vec3 rayOrigin;",
-     "uniform sampler2D voxelMap;",
-     "varying highp vec3 near;",
-     "highp float max3(highp vec3 v) {",
-     "  return max(max(v.x, v.y), v.z);",
-     "}",
-     "highp float min3(highp vec3 v) {",
-     "  return min(min(v.x, v.y), v.z);",
-     "}",
-     "highp float distanceToBound(highp vec3 pos, highp vec3 direction, highp vec3 bound, out lowp vec3 face) {",
-     "  highp vec3 contact = (bound - pos) / direction;",
-     "  highp float distance = min3(contact);",
-     "  face = step(-distance, -contact) * sign(direction);",
-     "  return distance;",
-     "}",
-     "void main() {",
-     "  highp vec3 rayDirection = normalize(near - rayOrigin);",
-     "  highp vec3 pos = near;",
-     "  lowp vec3 voxelPos = clamp(floor(pos * 8.0) / 8.0, -0.5, 0.375);",
-     "  for (int i = 0; i < 22; ++i) {", // A ray can pass through at most 22 cells (intuitively, but verified through testing)
-     "    lowp vec4 voxel = texture2D(voxelMap, vec2((voxelPos.x + 0.5) / 8.0 + voxelPos.z + 0.5 + 0.5 / 64.0, (voxelPos.y + 0.5) + 0.5 / 8.0));",
-     "    if (voxel.a > 0.0) {",
-     "      gl_FragColor = vec4(voxel.rgb / (length(rayOrigin - pos) - 3.0), 1);",
-     "//      highp vec4 transformed = matrix * vec4(pos, 1);",
-     "//      gl_FragDepth = (gl_DepthRange.diff * transformed.z / transformed.w + gl_DepthRange.near + gl_DepthRange.far) / 2.0;",
-     "      return;",
-     "    }",
-     "    lowp vec3 face;",
-     "    highp float stepDistance = distanceToBound(pos, rayDirection, voxelPos + (sign(rayDirection) * 0.5 + 0.5) / 8.0, face);",
-     "    voxelPos += face / 8.0;", 
-     "    if (clamp(voxelPos, -0.5, 0.375) != voxelPos) {",
-     "      discard;",
-     "    }",
-     "    pos += rayDirection * stepDistance;",
-     "  }",
-     "  discard;",
-     "}"]);
-}
-
-LD29.prototype.initBuffers = function() {
-  this.cubeVertices = new LD29.StaticBuffer(this.gl, LD29.CUBE_VERTICES);
+LD29.prototype.initRenderers = function() {
+  this.sprite3dRenderer = new LD29.Sprite3DRenderer(this.gl);
 }
 
 LD29.prototype.initState = function() {
@@ -137,36 +72,91 @@ LD29.prototype.render = function() {
   mat4.translate(modelview, modelview, [0, 0, -5.0]);
   mat4.rotateY(modelview, modelview, this.inputX * Math.PI * 4);
   mat4.rotateX(modelview, modelview, this.inputY * Math.PI * 4);
-  var matrix = mat4.create();
-  mat4.multiply(matrix, projection, modelview);
-  var inverseModelview = mat4.create();
-  mat4.invert(inverseModelview, modelview);
-  var rayOrigin = vec3.create();
-  vec3.transformMat4(rayOrigin, [0, 0, 0], inverseModelview);
+  this.sprite3dRenderer.render(this.voxelMap, projection, modelview);
+  window.requestAnimFrame(this.wrap(this.render));
+}
+
+LD29.Sprite3DRenderer = function(gl) {
+  this.gl = gl;
+  // Loosely based on algorithm at http://prideout.net/blog/?p=64
+  this.program = new LD29.Program(
+    gl,
+    ["uniform mat4 matrix;",
+     "attribute vec3 pos;",
+     "varying highp vec3 near;",
+     "void main() {",
+     "  gl_Position = matrix * vec4(pos, 1);",
+     "  near = pos;",
+     "}"],
+    ["//uniform highp mat4 matrix;",
+     "uniform highp vec3 rayOrigin;",
+     "uniform sampler2D voxelMap;",
+     "varying highp vec3 near;",
+     "highp float max3(highp vec3 v) {",
+     "  return max(max(v.x, v.y), v.z);",
+     "}",
+     "highp float min3(highp vec3 v) {",
+     "  return min(min(v.x, v.y), v.z);",
+     "}",
+     "highp float distanceToBound(highp vec3 pos, highp vec3 direction, highp vec3 bound, out lowp vec3 face) {",
+     "  highp vec3 contact = (bound - pos) / direction;",
+     "  highp float distance = min3(contact);",
+     "  face = step(-distance, -contact) * sign(direction);",
+     "  return distance;",
+     "}",
+     "void main() {",
+     "  highp vec3 rayDirection = normalize(near - rayOrigin);",
+     "  highp vec3 pos = near;",
+     "  lowp vec3 voxelPos = clamp(floor(pos * 8.0) / 8.0, -0.5, 0.375);",
+     "  for (int i = 0; i < 22; ++i) {", // A ray can pass through at most 22 cells (intuitively, but verified through testing)
+     "    lowp vec4 voxel = texture2D(voxelMap, vec2((voxelPos.x + 0.5) / 8.0 + voxelPos.z + 0.5 + 0.5 / 64.0, (voxelPos.y + 0.5) + 0.5 / 8.0));",
+     "    if (voxel.a > 0.0) {",
+     "      gl_FragColor = vec4(voxel.rgb / (length(pos - rayOrigin) - 3.0), 1);",
+     "//      highp vec4 transformed = matrix * vec4(pos, 1);",
+     "//      gl_FragDepth = (gl_DepthRange.diff * transformed.z / transformed.w + gl_DepthRange.near + gl_DepthRange.far) / 2.0;",
+     "      return;",
+     "    }",
+     "    lowp vec3 face;",
+     "    highp float stepDistance = distanceToBound(pos, rayDirection, voxelPos + (sign(rayDirection) * 0.5 + 0.5) / 8.0, face);",
+     "    voxelPos += face / 8.0;", 
+     "    if (clamp(voxelPos, -0.5, 0.375) != voxelPos) {",
+     "      discard;",
+     "    }",
+     "    pos += rayDirection * stepDistance;",
+     "  }",
+     "  discard;",
+     "}"]);
+  this.cubeVertices = new LD29.StaticBuffer(this.gl, LD29.Sprite3DRenderer.CUBE_VERTICES);
+  this.matrix = mat4.create();
+  this.vector = vec3.create();
+}
+
+LD29.Sprite3DRenderer.CUBE_VERTICES = [-0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5, -0.5, -0.5,
+                                        0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  0.5, -0.5,
+                                        0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5,  0.5,
+                                        0.5, -0.5,  0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  0.5,
+                                        0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5, -0.5,  0.5,
+                                       -0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5,  0.5,
+                                       -0.5, -0.5,  0.5, -0.5,  0.5,  0.5, -0.5, -0.5, -0.5,
+                                       -0.5, -0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5,
+                                       -0.5, -0.5,  0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
+                                       -0.5, -0.5, -0.5,  0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
+                                       -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5, -0.5,
+                                       -0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5];
+
+LD29.Sprite3DRenderer.prototype.render = function(voxelMap, projection, modelview) {
+  var gl = this.gl;
+  mat4.invert(this.matrix, modelview);
+  vec3.transformMat4(this.vector, [0, 0, 0], this.matrix);
+  mat4.multiply(this.matrix, projection, modelview);
   var gl = this.gl;
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  this.voxelMap.use(gl.TEXTURE0);
-  this.program.use({matrix: matrix,
-                    rayOrigin: rayOrigin,
+  voxelMap.use(gl.TEXTURE0);
+  this.program.use({matrix: this.matrix,
+                    rayOrigin: this.vector,
                     voxelMap: 0},
                    {pos: this.cubeVertices});
-  gl.drawArrays(gl.TRIANGLES, 0, 36);
-/*
-  mat4.identity(modelview);
-  mat4.translate(modelview, modelview, [0, 2.0, -50.0]);
-  mat4.rotateY(modelview, modelview, this.tick / 100);
-  mat4.rotateX(modelview, modelview, this.tick / 60);
-  mat4.invert(inverseModelview, modelview);
-  vec3.transformMat4(rayOrigin, [0, 0, 0], inverseModelview);
-
-  this.program.use({projection: projection,
-                    modelview: modelview,
-                    rayOrigin: rayOrigin,
-                    voxelMap: 0},
-                   {pos: this.cubeVertices});
-  gl.drawArrays(gl.TRIANGLES, 0, 36);
-*/
-  window.requestAnimFrame(this.wrap(this.render));
+  gl.drawArrays(gl.TRIANGLES, 0, LD29.Sprite3DRenderer.CUBE_VERTICES.length / 3);
 }
 
 LD29.Texture = function(gl, url) {
