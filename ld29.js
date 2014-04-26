@@ -66,13 +66,13 @@ LD29.prototype.initPrograms = function() {
      "  highp vec2 temp = min(contactMax.xy, contactMax.yz);",
      "  highp float farDistance = min(temp.x, temp.y);",
      "  highp vec3 far = rayOrigin + rayDirection * farDistance;",
-     "  lowp vec3 pos = near;",
-     "  lowp vec3 step = (far - near) / 32.0;",
+     "  highp vec3 pos = near;",
+     "  highp vec3 step = (far - near) / 32.0;",
      "  for (int i = 0; i < 32; ++i) {",
      "    pos += step;",
-     "    lowp vec4 voxel = texture2D(voxelMap, vec2((pos.x + 0.5) / 8.0 + floor((pos.z + 0.5) * 8.0) / 8.0, pos.y + 0.5));",
-     "    if (voxel.r > 0.0) {",
-     "      gl_FragColor = vec4(voxel.rgb, 1);",
+     "    lowp vec4 voxel = texture2D(voxelMap, vec2((pos.x + 0.5) / 8.0 + floor((pos.z + 0.5) * 8.0 + 0.5) / 8.0, pos.y + 0.5));",
+     "    if (voxel.a > 0.0) {",
+     "      gl_FragColor = vec4(voxel.rgb * float(32 - i) / 32.0, 1);",
      "      return;",
      "    }",
      "  }",
@@ -88,12 +88,23 @@ LD29.prototype.initBuffers = function() {
 
 LD29.prototype.initState = function() {
   this.tick = 0;
+  this.inputX = 0;
+  this.inputY = 0;
+}
+
+LD29.prototype.wrap = function(func) {
+  var otherThis = this;
+  return function() {func.apply(otherThis, arguments);}
+}
+
+LD29.prototype.handleMouseMove = function(evt) {
+  this.inputX = (evt.clientX / this.canvas.width - 0.5);
+  this.inputY = (evt.clientY / this.canvas.height - 0.5);
 }
 
 LD29.prototype.start = function() {
-  var otherThis = this;
-  this.staticRender = function() { otherThis.render(); };
-  window.onload = this.staticRender;
+  window.onload = this.wrap(this.render);
+  this.canvas.onmousemove = this.wrap(this.handleMouseMove);
 }
 
 LD29.prototype.updateState = function() {
@@ -111,25 +122,40 @@ LD29.prototype.render = function() {
   this.updateViewport();
   var sqrtAspect = Math.sqrt(canvas.width / canvas.height);
   var projection = mat4.create();
-  mat4.frustum(projection, -sqrtAspect * LD29.HALF_FOV, sqrtAspect * LD29.HALF_FOV, -LD29.HALF_FOV/sqrtAspect, LD29.HALF_FOV/sqrtAspect, 1, 10);
+  mat4.frustum(projection, -sqrtAspect * LD29.HALF_FOV, sqrtAspect * LD29.HALF_FOV, -LD29.HALF_FOV/sqrtAspect, LD29.HALF_FOV/sqrtAspect, 1, 100);
   var modelview = mat4.create();
   mat4.translate(modelview, modelview, [0, 0, -5.0]);
-  mat4.rotateY(modelview, modelview, this.tick / 1000);
-  mat4.rotateX(modelview, modelview, this.tick / 600);
+  mat4.rotateY(modelview, modelview, this.inputX * Math.PI * 2);
+  mat4.rotateX(modelview, modelview, this.inputY * Math.PI * 2);
   var inverseModelview = mat4.create();
   mat4.invert(inverseModelview, modelview);
   var rayOrigin = vec3.create();
   vec3.transformMat4(rayOrigin, [0, 0, 0], inverseModelview);
   var gl = this.gl;
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  this.voxelMap.use(gl.TEXTURE0);
   this.program.use({projection: projection,
                     modelview: modelview,
                     rayOrigin: rayOrigin,
                     voxelMap: 0},
                    {pos: this.cubeVertices});
-  this.voxelMap.use(gl.TEXTURE0);
   gl.drawArrays(gl.TRIANGLES, 0, 36);
-  window.requestAnimFrame(this.staticRender);
+/*
+  mat4.identity(modelview);
+  mat4.translate(modelview, modelview, [0, 2.0, -50.0]);
+  mat4.rotateY(modelview, modelview, this.tick / 100);
+  mat4.rotateX(modelview, modelview, this.tick / 60);
+  mat4.invert(inverseModelview, modelview);
+  vec3.transformMat4(rayOrigin, [0, 0, 0], inverseModelview);
+
+  this.program.use({projection: projection,
+                    modelview: modelview,
+                    rayOrigin: rayOrigin,
+                    voxelMap: 0},
+                   {pos: this.cubeVertices});
+  gl.drawArrays(gl.TRIANGLES, 0, 36);
+*/
+  window.requestAnimFrame(this.wrap(this.render));
 }
 
 LD29.Texture = function(gl, url) {
