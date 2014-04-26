@@ -24,11 +24,15 @@ LD29.prototype.initGL = function() {
 }
 
 LD29.prototype.initTextures = function() {
-  this.voxelMap = new LD29.Texture(this.gl, "voxelmap.png");
+  this.duckVoxelMap = new LD29.Texture(this.gl, "duck.voxelmap.png");
 }
 
 LD29.prototype.initRenderers = function() {
+  this.projection = mat4.create();
   this.sprite3dRenderer = new LD29.Sprite3DRenderer(this.gl);
+  this.ducks = [new LD29.Sprite3D(this.sprite3dRenderer, this.duckVoxelMap).at([-1.5, 0.0, -5.0]),
+                new LD29.Sprite3D(this.sprite3dRenderer, this.duckVoxelMap).at([ 0.0, 0.0, -5.0]),
+                new LD29.Sprite3D(this.sprite3dRenderer, this.duckVoxelMap).at([-1.0, 0.0, -8.0])];
 }
 
 LD29.prototype.initState = function() {
@@ -43,8 +47,15 @@ LD29.prototype.wrap = function(func) {
 }
 
 LD29.prototype.handleMouseMove = function(evt) {
-  this.inputX = (evt.clientX / this.canvas.width - 0.5);
-  this.inputY = (evt.clientY / this.canvas.height - 0.5);
+  newX = (evt.clientX / this.canvas.width - 0.5);
+  newY = (evt.clientY / this.canvas.height - 0.5);
+  for (var ii = 0; ii < this.ducks.length; ii++) {
+    var duck = this.ducks[ii];
+    mat4.rotateY(duck.modelview, duck.modelview, (newX - this.inputX) * Math.PI * 4);
+    mat4.rotateX(duck.modelview, duck.modelview, (newY - this.inputY) * Math.PI * 4);
+  }
+  this.inputX = newX;
+  this.inputY = newY;
 }
 
 LD29.prototype.start = function() {
@@ -62,17 +73,21 @@ LD29.prototype.updateViewport = function() {
   this.gl.viewport(0, 0, canvas.width, canvas.height)
 }
 
+LD29.prototype.updateProjection = function() {
+  var sqrtAspect = Math.sqrt(canvas.width / canvas.height);
+  mat4.frustum(this.projection, -sqrtAspect * LD29.HALF_FOV, sqrtAspect * LD29.HALF_FOV, -LD29.HALF_FOV/sqrtAspect, LD29.HALF_FOV/sqrtAspect, 1, 100);
+}
+
 LD29.prototype.render = function() {
   this.updateState();
   this.updateViewport();
-  var sqrtAspect = Math.sqrt(canvas.width / canvas.height);
-  var projection = mat4.create();
-  mat4.frustum(projection, -sqrtAspect * LD29.HALF_FOV, sqrtAspect * LD29.HALF_FOV, -LD29.HALF_FOV/sqrtAspect, LD29.HALF_FOV/sqrtAspect, 1, 100);
-  var modelview = mat4.create();
-  mat4.translate(modelview, modelview, [0, 0, -5.0]);
-  mat4.rotateY(modelview, modelview, this.inputX * Math.PI * 4);
-  mat4.rotateX(modelview, modelview, this.inputY * Math.PI * 4);
-  this.sprite3dRenderer.render(this.voxelMap, projection, modelview);
+  this.updateProjection();
+  var gl = this.gl;
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  for (var ii = 0; ii < this.ducks.length; ii++) {
+    var duck = this.ducks[ii];
+    duck.render(this.projection);
+  }
   window.requestAnimFrame(this.wrap(this.render));
 }
 
@@ -150,13 +165,33 @@ LD29.Sprite3DRenderer.prototype.render = function(voxelMap, projection, modelvie
   vec3.transformMat4(this.vector, [0, 0, 0], this.matrix);
   mat4.multiply(this.matrix, projection, modelview);
   var gl = this.gl;
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   voxelMap.use(gl.TEXTURE0);
   this.program.use({matrix: this.matrix,
                     rayOrigin: this.vector,
                     voxelMap: 0},
                    {pos: this.cubeVertices});
   gl.drawArrays(gl.TRIANGLES, 0, LD29.Sprite3DRenderer.CUBE_VERTICES.length / 3);
+}
+
+LD29.Sprite3D = function(sprite3dRenderer, voxelMap, modelview) {
+  if (arguments.length > 0) {
+    this.sprite3dRenderer = sprite3dRenderer;
+    this.voxelMap = voxelMap;
+    this.modelview = modelview || mat4.create();
+  }
+}
+
+LD29.Sprite3D.prototype.at = function(position) {
+  this.moveTo(position);
+  return this;
+}
+
+LD29.Sprite3D.prototype.moveTo = function(position) {
+  mat4.translate(this.modelview, this.modelview, position);
+}
+
+LD29.Sprite3D.prototype.render = function(projection) {
+  this.sprite3dRenderer.render(this.voxelMap, projection, this.modelview);
 }
 
 LD29.Texture = function(gl, url) {
