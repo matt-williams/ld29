@@ -45,18 +45,15 @@ LD29.prototype.initPrograms = function() {
   // Loosely based on algorithm at http://prideout.net/blog/?p=64
   this.program = new LD29.Program(
     this.gl,
-    ["uniform mat4 projection;",
-     "uniform mat4 modelview;",
+    ["uniform mat4 matrix;",
      "attribute vec3 pos;",
      "varying highp vec3 near;",
      "void main() {",
-     "  gl_Position = projection * modelview * vec4(pos, 1);",
+     "  gl_Position = matrix * vec4(pos, 1);",
      "  near = pos;",
      "}"],
-    ["uniform highp mat4 modelview;",
+    ["//uniform highp mat4 matrix;",
      "uniform highp vec3 rayOrigin;",
-     "uniform highp vec2 viewportSize;",
-     "uniform highp float focalLength;",
      "uniform sampler2D voxelMap;",
      "varying highp vec3 near;",
      "highp float max3(highp vec3 v) {",
@@ -65,27 +62,34 @@ LD29.prototype.initPrograms = function() {
      "highp float min3(highp vec3 v) {",
      "  return min(min(v.x, v.y), v.z);",
      "}",
+     "highp float distanceToBound(highp vec3 pos, highp vec3 direction, highp vec3 bound, out lowp vec3 face) {",
+     "  highp vec3 contact = (bound - pos) / direction;",
+     "  highp float distance = min3(contact);",
+     "  face = step(-distance, -contact) * sign(direction);",
+     "  return distance;",
+     "}",
      "void main() {",
      "  highp vec3 rayDirection = normalize(near - rayOrigin);",
-     "  highp vec3 contact = (vec3(sign(rayDirection) * 0.5) - rayOrigin) / rayDirection;",
-     "  highp float farDistance = min3(contact);",
-     "  highp vec3 step = rayDirection / 16.0;",
-     "  highp vec3 pos = near + step / 2.0;",
-     "  for (int i = 0; i < 24; ++i) {",
-     "    if (length(pos - rayOrigin) >= farDistance) {",
-     "      discard;",
-     "    }",
-     "    lowp vec4 voxel = texture2D(voxelMap, vec2((pos.x + 0.5) / 8.0 + floor((pos.z + 0.5) * 8.0 + 0.5) / 8.0, pos.y + 0.5));",
+     "  highp vec3 pos = near;",
+     "  lowp vec3 voxelPos = clamp(floor(pos * 8.0) / 8.0, -0.5, 0.375);",
+     "  for (int i = 0; i < 22; ++i) {", // A ray can pass through at most 22 cells (intuitively, but verified through testing)
+     "    lowp vec4 voxel = texture2D(voxelMap, vec2((voxelPos.x + 0.5) / 8.0 + voxelPos.z + 0.5 + 0.5 / 64.0, (voxelPos.y + 0.5) + 0.5 / 8.0));",
      "    if (voxel.a > 0.0) {",
-     "      gl_FragColor = vec4(voxel.rgb * float(32 - i) / 32.0, 1);",
+     "      gl_FragColor = vec4(voxel.rgb / (length(rayOrigin - pos) - 3.0), 1);",
+     "//      highp vec4 transformed = matrix * vec4(pos, 1);",
+     "//      gl_FragDepth = (gl_DepthRange.diff * transformed.z / transformed.w + gl_DepthRange.near + gl_DepthRange.far) / 2.0;",
      "      return;",
      "    }",
-     "    pos += step;",
+     "    lowp vec3 face;",
+     "    highp float stepDistance = distanceToBound(pos, rayDirection, voxelPos + (sign(rayDirection) * 0.5 + 0.5) / 8.0, face);",
+     "    voxelPos += face / 8.0;", 
+     "    if (clamp(voxelPos, -0.5, 0.375) != voxelPos) {",
+     "      discard;",
+     "    }",
+     "    pos += rayDirection * stepDistance;",
      "  }",
      "  discard;",
      "}"]);
-/*
-*/
 }
 
 LD29.prototype.initBuffers = function() {
@@ -131,8 +135,10 @@ LD29.prototype.render = function() {
   mat4.frustum(projection, -sqrtAspect * LD29.HALF_FOV, sqrtAspect * LD29.HALF_FOV, -LD29.HALF_FOV/sqrtAspect, LD29.HALF_FOV/sqrtAspect, 1, 100);
   var modelview = mat4.create();
   mat4.translate(modelview, modelview, [0, 0, -5.0]);
-  mat4.rotateY(modelview, modelview, this.inputX * Math.PI * 2);
-  mat4.rotateX(modelview, modelview, this.inputY * Math.PI * 2);
+  mat4.rotateY(modelview, modelview, this.inputX * Math.PI * 4);
+  mat4.rotateX(modelview, modelview, this.inputY * Math.PI * 4);
+  var matrix = mat4.create();
+  mat4.multiply(matrix, projection, modelview);
   var inverseModelview = mat4.create();
   mat4.invert(inverseModelview, modelview);
   var rayOrigin = vec3.create();
@@ -140,8 +146,7 @@ LD29.prototype.render = function() {
   var gl = this.gl;
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   this.voxelMap.use(gl.TEXTURE0);
-  this.program.use({projection: projection,
-                    modelview: modelview,
+  this.program.use({matrix: matrix,
                     rayOrigin: rayOrigin,
                     voxelMap: 0},
                    {pos: this.cubeVertices});
