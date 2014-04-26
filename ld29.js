@@ -42,6 +42,7 @@ LD29.prototype.initTextures = function() {
 }
 
 LD29.prototype.initPrograms = function() {
+  // Loosely based on algorithm at http://prideout.net/blog/?p=64
   this.program = new LD29.Program(
     this.gl,
     ["uniform mat4 projection;",
