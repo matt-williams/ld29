@@ -247,7 +247,7 @@ LD29.Duck.prototype.tick = function(tick) {
     mat4.rotateY(this.modelview, this.modelview, -Math.PI / 32);
   }
   mat4.identity(this.animation);
-  mat4.rotateX(this.animation, this.animation, -Math.cos(tick / Math.PI / 3) * Math.PI / 500);
+  mat4.rotateX(this.animation, this.animation, -Math.cos(tick / Math.PI / 3) * Math.PI / 10);
   if (this.modelview[13] > -10) {
     mat4.translate(this.modelview, this.modelview, [0, -0.2, 0]);
   }
