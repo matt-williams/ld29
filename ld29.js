@@ -661,6 +661,7 @@ LD29.Frog.prototype.collide = function(otherSprite, thisPos, otherPos, tick) {
     if (otherSprite instanceof(LD29.Duck)) {
       if (thisPos[1] > otherPos[1] + 0.8) {
         otherSprite.deathTick = tick + 11;
+        this.score++;
       } else {
         this.deathTick = tick + 11;
       }
@@ -680,7 +681,7 @@ LD29.Frog.prototype.tick = function(tick) {
   mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3 + this.phase) * 0.05 + 0.2]);
   this.modelview[12] = Math.max(Math.min(this.modelview[12], LD29.PLAY_AREA[2] - 3), LD29.PLAY_AREA[0] + 3);
   this.modelview[14] = Math.max(Math.min(this.modelview[14], LD29.PLAY_AREA[3] - 3), LD29.PLAY_AREA[1] + 3);
-  if (this.modelview[13] > LD29.WATER_DEPTH - 0.5) {
+  if (this.modelview[13] > LD29.WATER_DEPTH - 10.0) {
     this.oxygen = Math.min(this.oxygen + 1, 1000);
   } else {
     this.oxygen = Math.max(this.oxygen - 5, 0);
