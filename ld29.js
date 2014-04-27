@@ -43,8 +43,12 @@ LD29.prototype.initSprites = function() {
   LD29.Plant.init(this.sprite3dRenderer);
   LD29.Fish.init(this.sprite3dRenderer);
   LD29.Frog.init(this.sprite3dRenderer);
+  LD29.Font.init(this.sprite3dRenderer);
   this.sprites = [];
+  this.fontSprites = [];
+  this.hudSprites = [];
   this.addInitialSprites();
+  this.displayHUD(0, 0);
 }
 
 LD29.prototype.addInitialSprites = function() {
@@ -59,6 +63,40 @@ LD29.prototype.addInitialSprites = function() {
   }
   for (var i = 0; i < 10; i++) {
     this.sprites.push(new LD29.Fish());
+  }
+  this.displayMessage("FROG V DUCKS\n\nLEFT   A\nRIGHT  D\nDIVE   S");
+}
+
+LD29.prototype.displayMessage = function(message) {
+  var lines = message.split("\n");
+  for (var ii = 0; ii < lines.length; ii++) {
+    var line = lines[ii];
+    for (var jj = 0; jj < line.length; jj++) {
+      if (line.charAt(jj) != " ") {
+        var font = new LD29.Font(line.charAt(jj), [jj + (20 - line.length) / 2, ii]);
+        this.sprites.push(font);
+        this.fontSprites.push(font);
+      }
+    }
+  }
+}
+
+LD29.prototype.displayHUD = function(score, oxygen) {
+  scoreMessage = "SCORE " + score;
+  oxygenMessage = "" + oxygen + " O2";
+  hudMessage = scoreMessage + "                  ".substring(scoreMessage.length + oxygenMessage.length) + oxygenMessage;
+  this.hudSprites = [];
+  for (var ii = 0; ii < hudMessage.length; ii++) {
+    if (hudMessage.charAt(ii) != " ") {
+      var font = new LD29.Font(hudMessage.charAt(ii), [ii, 10]);
+      this.hudSprites.push(font);
+    }
+  }
+}
+
+LD29.prototype.clearMessage = function() {
+  for (var ii = 0; ii < this.fontSprites.length; ii++) {
+    this.fontSprites[ii].deathTick = this.tick + 11;
   }
 }
 
@@ -139,6 +177,7 @@ LD29.prototype.maybeTick = function() {
 LD29.prototype.ticked = function(tick) {
   if (!this.frog && (this.leftDown || this.diveDown || this.rightDown)) {
     this.frog = new LD29.Frog();
+    this.clearMessage();
     this.sprites.push(this.frog);
   }
   if (this.frog) {
@@ -155,6 +194,7 @@ LD29.prototype.ticked = function(tick) {
       this.sprites.push(new LD29.Fish());
     }
     this.frog.controls(this.leftDown, this.diveDown, this.rightDown);
+    this.displayHUD(this.frog.score, this.frog.oxygen);
   }
   for (var ii = 0; ii < this.sprites.length; ii++) {
     var sprite = this.sprites[ii];
@@ -197,7 +237,7 @@ LD29.prototype.updateViewport = function() {
 LD29.prototype.updateProjection = function() {
   var sqrtAspect = Math.sqrt(canvas.width / canvas.height);
   mat4.frustum(this.projection, -sqrtAspect * LD29.HALF_FOV, sqrtAspect * LD29.HALF_FOV, -LD29.HALF_FOV/sqrtAspect, LD29.HALF_FOV/sqrtAspect, 1, 1000);
-  var target = this.frog ? [this.frog.modelview[12], this.frog.modelview[13], this.frog.modelview[14]] : [0, LD29.WATER_DEPTH, -50];
+  var target = this.frog ? [this.frog.modelview[12], this.frog.modelview[13], this.frog.modelview[14]] : [(LD29.PLAY_AREA[0] + LD29.PLAY_AREA[2]) / 2, LD29.WATER_DEPTH + 2, (LD29.PLAY_AREA[1] + LD29.PLAY_AREA[3]) / 2];
   this.eye[1] = target[1] - LD29.WATER_DEPTH;
   mat4.lookAt(this.matrix, this.eye, target, [0, 1, 0]);
   mat4.multiply(this.projection, this.projection, this.matrix);
@@ -214,6 +254,16 @@ LD29.prototype.render = function() {
     sprite.render(this.projection, this.eye);
   }
   this.sandSurface.render(this.projection, this.eye);
+  var hudVector = [0, 0, 0];
+  if (this.frog) {
+    hudVector = [this.frog.modelview[12] - (LD29.PLAY_AREA[0] + LD29.PLAY_AREA[2]) / 2, this.frog.modelview[13] - (LD29.WATER_DEPTH + 2), this.frog.modelview[14] - (LD29.PLAY_AREA[1] + LD29.PLAY_AREA[3]) / 2];
+  }
+  for (var ii = 0; ii < this.hudSprites.length; ii++) {
+    var sprite = this.hudSprites[ii];
+    mat4.identity(sprite.animation);
+    mat4.translate(sprite.animation, sprite.animation, hudVector);
+    sprite.render(this.projection, this.eye);
+  }
   gl.enable(gl.BLEND);
   this.waterSurface.render(this.projection, this.eye);
   window.requestAnimFrame(this.wrap(this.render));
@@ -331,6 +381,8 @@ LD29.Sprite3DRenderer = function(gl) {
      "}"],
     ["//uniform highp mat4 matrix;",
      "uniform highp vec3 rayOrigin;",
+     "uniform mediump vec2 scale;",
+     "uniform mediump vec2 offset;",
      "uniform sampler2D voxelMap;",
      "varying highp vec3 near;",
      "highp float max3(highp vec3 v) {",
@@ -351,7 +403,7 @@ LD29.Sprite3DRenderer = function(gl) {
      "  lowp vec3 face = step(-max3(abs(pos)), -abs(pos)) * sign(rayDirection);",
      "  lowp vec3 voxelPos = clamp(floor(pos * 8.0) / 8.0, -0.5, 0.375);",
      "  for (int i = 0; i < 22; ++i) {", // A ray can pass through at most 22 cells (intuitively, but verified through testing)
-     "    lowp vec4 voxel = texture2D(voxelMap, 1.0 - vec2((voxelPos.x + 0.5) / 8.0 + voxelPos.z + 0.5 + 0.5 / 64.0, (voxelPos.y + 0.5) + 0.5 / 8.0));",
+     "    lowp vec4 voxel = texture2D(voxelMap, (1.0 - vec2((0.375 - voxelPos.x) / 8.0 + voxelPos.z + 0.5 + 0.5 / 64.0, (voxelPos.y + 0.5) + 0.5 / 8.0)) * scale + offset);",
      "    if (voxel.a > 0.0) {",
      "      gl_FragColor = vec4(voxel.rgb * (dot(face, rayDirection) + 1.0) * 0.5, 1);",
      "//      highp vec4 transformed = matrix * vec4(pos, 1);",
@@ -385,7 +437,7 @@ LD29.Sprite3DRenderer.CUBE_VERTICES = [-0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
                                        -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5, -0.5,
                                        -0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5];
 
-LD29.Sprite3DRenderer.prototype.render = function(voxelMap, projection, eye, modelview) {
+LD29.Sprite3DRenderer.prototype.render = function(voxelMap, scale, offset, projection, eye, modelview) {
   var gl = this.gl;
   mat4.invert(this.matrix, modelview);
   vec3.transformMat4(this.vector, eye, this.matrix);
@@ -393,12 +445,14 @@ LD29.Sprite3DRenderer.prototype.render = function(voxelMap, projection, eye, mod
   voxelMap.use(gl.TEXTURE0);
   this.program.use({matrix: this.matrix,
                     rayOrigin: this.vector,
-                    voxelMap: 0},
+                    voxelMap: 0,
+                    scale: scale,
+                    offset: offset},
                    {pos: this.cubeVertices});
   gl.drawArrays(gl.TRIANGLES, 0, LD29.Sprite3DRenderer.CUBE_VERTICES.length / 3);
 }
 
-LD29.Sprite3D = function(sprite3dRenderer, voxelMap, spinOnSpawn, scaleOnSpawn, spinOnDie, scaleOnDie, modelview, animation) {
+LD29.Sprite3D = function(sprite3dRenderer, voxelMap, spinOnSpawn, scaleOnSpawn, spinOnDie, scaleOnDie, scale, offset, modelview, animation) {
   if (arguments.length > 0) {
     this.sprite3dRenderer = sprite3dRenderer;
     this.voxelMap = voxelMap;
@@ -406,6 +460,8 @@ LD29.Sprite3D = function(sprite3dRenderer, voxelMap, spinOnSpawn, scaleOnSpawn, 
     this.scaleOnSpawn = scaleOnSpawn;
     this.spinOnDie = spinOnDie;
     this.scaleOnDie = scaleOnDie;
+    this.scale = scale || [1, 1];
+    this.offset = offset || [0, 0];
     this.modelview = modelview || mat4.create();
     this.animation = animation || mat4.create();
     this.matrix = mat4.create();
@@ -462,7 +518,7 @@ LD29.Sprite3D.prototype.collide = function(otherSprite, thisPos, otherPos, tick)
 
 LD29.Sprite3D.prototype.render = function(projection, eye) {
   mat4.multiply(this.matrix, this.modelview, this.animation);
-  this.sprite3dRenderer.render(this.voxelMap, projection, eye, this.matrix);
+  this.sprite3dRenderer.render(this.voxelMap, this.scale, this.offset, projection, eye, this.matrix);
 }
 
 LD29.Sprite3D.prototype.positionRandomly = function(xzRange, y, rRange) {
@@ -640,6 +696,26 @@ LD29.Frog.prototype.tick = function(tick) {
   }
   mat4.translate(this.modelview, this.modelview, [0, this.yv, 0]);
   this.modelview[13] = Math.max(this.modelview[13], LD29.SAND_DEPTH + 1.0); 
+}
+
+LD29.Font = function(character, position) {
+  var code = character.charCodeAt(0);
+  code = ((code >= LD29.Font.CHAR_A) && (code <= LD29.Font.CHAR_Z)) ? code - LD29.Font.CHAR_A :
+         ((code >= LD29.Font.CHAR_0) && (code <= LD29.Font.CHAR_9)) ? code - LD29.Font.CHAR_0 + 26 :
+         39;
+  LD29.Sprite3D.call(this, LD29.Font.sprite3dRenderer, LD29.Font.voxelMap, true, true, true, true, [1, 1 / 40], [0, code / 40]);
+  mat4.translate(this.modelview, this.modelview, [position[0] * 1.5 - 15, position[1] * -1.5 - 23, -50]);
+}
+LD29.Font.prototype = new LD29.Sprite3D();
+
+LD29.Font.CHAR_A = "A".charCodeAt(0);
+LD29.Font.CHAR_Z = "Z".charCodeAt(0);
+LD29.Font.CHAR_0 = "0".charCodeAt(0);
+LD29.Font.CHAR_9 = "9".charCodeAt(0);
+
+LD29.Font.init = function(sprite3dRenderer) {
+  LD29.Font.sprite3dRenderer = sprite3dRenderer;
+  LD29.Font.voxelMap = new LD29.Texture(sprite3dRenderer.gl, "font.voxelmap.png");
 }
 
 LD29.Texture = function(gl, url) {
