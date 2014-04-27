@@ -6,11 +6,15 @@ LD29 = function(canvas) {
 
 LD29.HALF_FOV = 0.25;
 LD29.FRAME_PERIOD_MS = 20;
+LD29.PLAY_AREA = [-10, -80, 10, -40];
+LD29.WATER_DEPTH = -10;
+LD29.SAND_DEPTH = -20;
 
 LD29.prototype.init = function() {
   this.initGL();
   this.initRenderers();
   this.initSprites();
+  this.initSurfaces();
   this.initState();
 }
 
@@ -19,7 +23,8 @@ LD29.prototype.initGL = function() {
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.enable(gl.DEPTH_TEST);
   gl.enable(gl.CULL_FACE);
-  gl.disable(gl.BLEND);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(true);
   this.gl = gl;
 }
@@ -28,6 +33,7 @@ LD29.prototype.initRenderers = function() {
   this.projection = mat4.create();
   this.matrix = mat4.create();
   this.sprite3dRenderer = new LD29.Sprite3DRenderer(this.gl);
+  this.surfaceRenderer = new LD29.SurfaceRenderer(this.gl);
 }
 
 LD29.prototype.initSprites = function() {
@@ -47,6 +53,13 @@ LD29.prototype.initSprites = function() {
                   new LD29.Frog()];
 }
 
+LD29.prototype.initSurfaces = function() {
+  this.waterSurface = new LD29.Surface(this.surfaceRenderer, 0.02, [0, 0, 0.5, 0.5], [0.5, 0.5, 0.25, 0]);
+  mat4.translate(this.waterSurface.modelview, this.waterSurface.modelview, [0, LD29.WATER_DEPTH, 0]);
+  this.sandSurface = new LD29.Surface(this.surfaceRenderer, 0, [0.75, 0.75, 0, 1.0], [0.25, 0.25, 0.75, 0]);
+  mat4.translate(this.sandSurface.modelview, this.sandSurface.modelview, [0, LD29.SAND_DEPTH, 0]);
+}
+
 LD29.prototype.initState = function() {
   this.tick = 0;
   this.inputX = 0;
@@ -61,13 +74,6 @@ LD29.prototype.wrap = function(func) {
 LD29.prototype.handleMouseMove = function(evt) {
   newX = (evt.clientX / this.canvas.width - 0.5);
   newY = (evt.clientY / this.canvas.height - 0.5);
-/*
-  for (var ii = 0; ii < this.sprites.length; ii++) {
-    var sprite = this.sprites[ii];
-    mat4.rotateY(sprite.modelview, sprite.modelview, (newX - this.inputX) * Math.PI * 4);
-    mat4.rotateX(sprite.modelview, sprite.modelview, (newY - this.inputY) * Math.PI * 4);
-  }
-*/
   this.inputX = newX;
   this.inputY = newY;
 }
@@ -104,6 +110,8 @@ LD29.prototype.ticked = function(tick) {
   for (var ii = 0; ii < this.sprites.length; ii++) {
     this.sprites[ii].tick(tick);
   }
+  this.waterSurface.tick(tick);
+  this.sandSurface.tick(tick);
 }
 
 LD29.prototype.updateViewport = function() {
@@ -124,11 +132,108 @@ LD29.prototype.render = function() {
   this.updateProjection();
   var gl = this.gl;
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.disable(gl.BLEND);
   for (var ii = 0; ii < this.sprites.length; ii++) {
     var sprite = this.sprites[ii];
     sprite.render(this.projection);
   }
+  this.sandSurface.render(this.projection);
+  gl.enable(gl.BLEND);
+  this.waterSurface.render(this.projection);
   window.requestAnimFrame(this.wrap(this.render));
+}
+
+LD29.Surface = function(surfaceRenderer, timeFactor, baseColor, highlightColor, modelview) {
+  this.surfaceRenderer = surfaceRenderer;
+  this.timeFactor = timeFactor;
+  this.xFreq = [Math.random() * 0.2, Math.random() * 0.2 + 0.2, Math.random() * 0.2 + 0.4, Math.random() * 0.2 + 0.2];
+  this.xPhase = [Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI];
+  this.xAmp = [Math.random() * Math.PI, Math.random() * Math.PI / 2, Math.random() * Math.PI / 4, Math.random() * Math.PI / 8];
+  this.zFreq = [Math.random() * 0.2, Math.random() * 0.2 + 0.2, Math.random() * 0.2 + 0.4, Math.random() * 0.2 + 0.2];
+  this.zPhase = [Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI, Math.random() * 2 * Math.PI];
+  this.zAmp = [Math.random() * Math.PI, Math.random() * Math.PI / 2, Math.random() * Math.PI / 4, Math.random() * Math.PI / 8];
+  this.baseColor = baseColor;
+  this.highlightColor = highlightColor;
+  this.modelview = modelview || mat4.create();
+}
+
+LD29.Surface.prototype.tick = function(tick) {
+  this.lastTick = tick;
+}
+
+LD29.Surface.prototype.render = function(projection) {
+  this.surfaceRenderer.render(projection,
+                              this.modelview,
+                              this.lastTick * this.timeFactor,
+                              this.xFreq, this.xPhase, this.xAmp,
+                              this.zFreq, this.zPhase, this.zAmp,
+                              this.baseColor, this.highlightColor);
+}
+
+LD29.SurfaceRenderer = function(gl) {
+  this.gl = gl;
+  this.program = new LD29.Program(
+    gl,
+    ["uniform mat4 matrix;",
+     "uniform mediump float thetaT;",
+     "uniform mediump vec4 xFreq;",
+     "uniform mediump vec4 xPhase;",
+     "uniform mediump vec4 xAmp;",
+     "uniform mediump vec4 zFreq;",
+     "uniform mediump vec4 zPhase;",
+     "uniform mediump vec4 zAmp;",
+     "attribute vec3 pos;",
+     "varying highp vec3 pos2;",
+     "varying highp vec3 normal;",
+     "void main() {",
+     "  mediump float thetaX = dot(cos(dot(pos.xxxx, xFreq) + xPhase + thetaT), xAmp);",
+     "  mediump float thetaZ = dot(cos(dot(pos.zzzz, zFreq) + zPhase + thetaT), zAmp);",
+     "  pos2 = pos;",
+     "  pos2.y += (sin(thetaX) + sin(thetaZ)) * 0.1;",
+     "  gl_Position = matrix * vec4(pos2, 1);",
+     "  normal = normalize(vec3(sin(thetaX), cos(thetaX) + cos(thetaZ), sin(thetaZ)));",
+     "}"],
+    ["uniform highp vec3 rayOrigin;",
+     "uniform lowp vec4 baseColor;",
+     "uniform lowp vec4 highlightColor;",
+     "varying highp vec3 pos2;",
+     "varying highp vec3 normal;",
+     "void main() {",
+     "  gl_FragColor = baseColor + highlightColor * dot(normalize(pos2 - rayOrigin), normal);",
+     "}"]);
+  if (!LD29.SurfaceRenderer.SURFACE_VERTICES) {
+    var vertices = [];
+    for (var x = LD29.PLAY_AREA[0]; x < LD29.PLAY_AREA[2]; x += 0.5) {
+      for (var z = LD29.PLAY_AREA[1]; z < LD29.PLAY_AREA[3]; z += 0.5) {
+        vertices.push(x, 0, z, x, 0, z + 0.5, x + 0.5, 0, z);
+        vertices.push(x + 0.5, 0, z, x, 0, z + 0.5, x + 0.5, 0, z + 0.5);
+      }
+    }
+    LD29.SurfaceRenderer.SURFACE_VERTICES = vertices;
+  }
+  this.surfaceVertices = new LD29.StaticBuffer(this.gl, LD29.SurfaceRenderer.SURFACE_VERTICES);
+  this.matrix = mat4.create();
+  this.vector = vec3.create();
+}
+
+LD29.SurfaceRenderer.prototype.render = function(projection, modelview, thetaT, xFreq, xPhase, xAmp, zFreq, zPhase, zAmp, baseColor, highlightColor) {
+  var gl = this.gl;
+  mat4.invert(this.matrix, modelview);
+  vec3.transformMat4(this.vector, [0, 0, 0], this.matrix);
+  mat4.multiply(this.matrix, projection, modelview);
+  this.program.use({matrix: this.matrix,
+                    thetaT: thetaT,
+                    xFreq: xFreq,
+                    xPhase: xPhase,
+                    xAmp: xAmp,
+                    zFreq: zFreq,
+                    zPhase: zPhase,
+                    zAmp: zAmp,
+                    rayOrigin: this.vector,
+                    baseColor: baseColor,
+                    highlightColor: highlightColor},
+                   {pos: this.surfaceVertices});
+  gl.drawArrays(gl.TRIANGLES, 0, LD29.SurfaceRenderer.SURFACE_VERTICES.length / 3);
 }
 
 LD29.Sprite3DRenderer = function(gl) {
@@ -204,7 +309,6 @@ LD29.Sprite3DRenderer.prototype.render = function(voxelMap, projection, modelvie
   mat4.invert(this.matrix, modelview);
   vec3.transformMat4(this.vector, [0, 0, 0], this.matrix);
   mat4.multiply(this.matrix, projection, modelview);
-  var gl = this.gl;
   voxelMap.use(gl.TEXTURE0);
   this.program.use({matrix: this.matrix,
                     rayOrigin: this.vector,
@@ -230,10 +334,15 @@ LD29.Sprite3D.prototype.render = function(projection) {
   this.sprite3dRenderer.render(this.voxelMap, projection, this.matrix);
 }
 
+LD29.Sprite3D.prototype.positionRandomly = function(xzRange, y, rRange) {
+  rRange = rRange || [0, Math.PI * 2];
+  mat4.translate(this.modelview, this.modelview, [Math.random() * (xzRange[2] - xzRange[0]) + xzRange[0], y, Math.random() * (xzRange[3] - xzRange[1]) + xzRange[1]]);
+  mat4.rotateY(this.modelview, this.modelview, Math.random() * (rRange[1] - rRange[0]) + rRange[0]);
+}
+
 LD29.Duck = function(sprite3dRenderer) {
   LD29.Sprite3D.call(this, LD29.Duck.sprite3dRenderer, LD29.Duck.voxelMap);
-  mat4.translate(this.modelview, this.modelview, [Math.random() * 20 - 10, 10, -Math.random() * 40 - 40]);
-  mat4.rotateY(this.modelview, this.modelview, Math.random() * Math.PI * 2);
+  this.positionRandomly(LD29.PLAY_AREA, 10);
   this.phase = Math.random() * Math.PI * 2;
 }
 LD29.Duck.prototype = new LD29.Sprite3D();
@@ -252,18 +361,17 @@ LD29.Duck.prototype.tick = function(tick) {
   }
   mat4.identity(this.animation);
   mat4.rotateX(this.animation, this.animation, -Math.cos(tick / Math.PI / 3 + this.phase) * Math.PI / 10);
-  if (this.modelview[13] > -10) {
+  if (this.modelview[13] > LD29.WATER_DEPTH + 0.5) {
     mat4.translate(this.modelview, this.modelview, [0, -0.2, 0]);
   }
-  if (this.modelview[13] < -10) {
+  if (this.modelview[13] < LD29.WATER_DEPTH + 0.5) {
     mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3 + this.phase) * 0.1 + 0.075]);
   }
 }
 
 LD29.Treasure = function(sprite3dRenderer) {
   LD29.Sprite3D.call(this, LD29.Treasure.sprite3dRenderer, LD29.Treasure.voxelMap);
-  mat4.translate(this.modelview, this.modelview, [Math.random() * 60 - 30, -12, -Math.random() * 60 - 20]);
-  mat4.rotateY(this.modelview, this.modelview, (Math.random() - 0.5) * Math.PI / 2);
+  this.positionRandomly(LD29.PLAY_AREA, LD29.SAND_DEPTH + 0.5, [-Math.PI / 4, Math.PI / 4]);
 }
 LD29.Treasure.prototype = new LD29.Sprite3D();
 
@@ -272,10 +380,17 @@ LD29.Treasure.init = function(sprite3dRenderer) {
   LD29.Treasure.voxelMap = new LD29.Texture(sprite3dRenderer.gl, "treasure.voxelmap.png");
 }
 
+LD29.Treasure.prototype.tick = function(tick) {
+  this.firstTick = this.firstTick || tick;
+  mat4.identity(this.animation);
+  mat4.rotateY(this.animation, this.animation, (tick - this.firstTick + 1 > 10) ? 0.0 : (tick - this.firstTick + 1 - 10) * Math.PI / 5);
+  var scalar = (tick - this.firstTick + 1 > 10) ? 1.0 : (tick - this.firstTick + 1) / 10;
+  mat4.scale(this.animation, this.animation, [scalar, scalar, scalar]);
+}
+
 LD29.Plant = function(sprite3dRenderer) {
   LD29.Sprite3D.call(this, LD29.Plant.sprite3dRenderer, LD29.Plant.voxelMap);
-  mat4.translate(this.modelview, this.modelview, [Math.random() * 60 - 30, -12, -Math.random() * 60 - 20]);
-  mat4.rotateY(this.modelview, this.modelview, Math.random() * Math.PI * 2);
+  this.positionRandomly(LD29.PLAY_AREA, LD29.SAND_DEPTH + 0.5);
 }
 LD29.Plant.prototype = new LD29.Sprite3D();
 
@@ -284,10 +399,17 @@ LD29.Plant.init = function(sprite3dRenderer) {
   LD29.Plant.voxelMap = new LD29.Texture(sprite3dRenderer.gl, "plant.voxelmap.png");
 }
 
+LD29.Plant.prototype.tick = function(tick) {
+  this.firstTick = this.firstTick || tick;
+  mat4.identity(this.animation);
+  mat4.rotateY(this.animation, this.animation, (tick - this.firstTick + 1 > 10) ? 0.0 : (tick - this.firstTick + 1 - 10) * Math.PI / 5);
+  var scalar = (tick - this.firstTick + 1 > 10) ? 1.0 : (tick - this.firstTick + 1) / 10;
+  mat4.scale(this.animation, this.animation, [scalar, scalar, scalar]);
+}
+
 LD29.Fish = function(sprite3dRenderer) {
   LD29.Sprite3D.call(this, LD29.Fish.sprite3dRenderer, LD29.Fish.voxelMap);
-  mat4.translate(this.modelview, this.modelview, [Math.random() * 60 - 30, -12, -Math.random() * 60 - 20]);
-  mat4.rotateY(this.modelview, this.modelview, Math.random() * Math.PI * 2);
+  this.positionRandomly(LD29.PLAY_AREA, LD29.SAND_DEPTH + 0.5);
   this.phase = Math.random() * Math.PI * 2;
 }
 LD29.Fish.prototype = new LD29.Sprite3D();
@@ -298,6 +420,7 @@ LD29.Fish.init = function(sprite3dRenderer) {
 }
 
 LD29.Fish.prototype.tick = function(tick) {
+  this.firstTick = this.firstTick || tick;
   if ((this.modelview[12] < -10.0 && this.modelview[8] < 0) ||
       (this.modelview[12] > 10.0 && this.modelview[8] > 0) ||
       (this.modelview[14] < -80.0 && this.modelview[10] < 0) ||
@@ -305,13 +428,15 @@ LD29.Fish.prototype.tick = function(tick) {
     mat4.rotateY(this.modelview, this.modelview, Math.PI / 32);
   }
   mat4.identity(this.animation);
+  var scalar = (tick - this.firstTick + 1 > 10) ? 1.0 : (tick - this.firstTick + 1) / 10;
+  mat4.scale(this.animation, this.animation, [scalar, scalar, scalar]);
   mat4.scale(this.animation, this.animation, [1.0 - Math.sin(tick / Math.PI / 3 + this.phase) * 0.15, 1.0 - Math.sin(tick / Math.PI / 3 + this.phase) * 0.15, 1.0 + Math.sin(tick / Math.PI / 3 + this.phase) *0.3]);
   mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3 + this.phase) * 0.1 + 0.075]);
 }
 
 LD29.Frog = function(sprite3dRenderer) {
   LD29.Sprite3D.call(this, LD29.Plant.sprite3dRenderer, LD29.Frog.voxelMap);
-  mat4.translate(this.modelview, this.modelview, [Math.random() * 60 - 30, -12, -Math.random() * 60 - 20]);
+  mat4.translate(this.modelview, this.modelview, [(LD29.PLAY_AREA[0] + LD29.PLAY_AREA[2]) / 2, LD29.WATER_DEPTH + 0.5, (LD29.PLAY_AREA[1] + LD29.PLAY_AREA[3]) / 3]);
   mat4.rotateY(this.modelview, this.modelview, Math.random() * Math.PI * 2);
   this.phase = Math.random() * Math.PI * 2;
 }
