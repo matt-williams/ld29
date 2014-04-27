@@ -210,32 +210,26 @@ LD29.Sprite3DRenderer.prototype.render = function(voxelMap, projection, modelvie
   gl.drawArrays(gl.TRIANGLES, 0, LD29.Sprite3DRenderer.CUBE_VERTICES.length / 3);
 }
 
-LD29.Sprite3D = function(sprite3dRenderer, voxelMap, modelview) {
+LD29.Sprite3D = function(sprite3dRenderer, voxelMap, modelview, animation) {
   if (arguments.length > 0) {
     this.sprite3dRenderer = sprite3dRenderer;
     this.voxelMap = voxelMap;
     this.modelview = modelview || mat4.create();
+    this.animation = animation || mat4.create();
+    this.matrix = mat4.create();
   }
-}
-
-LD29.Sprite3D.prototype.at = function(position) {
-  this.moveTo(position);
-  return this;
-}
-
-LD29.Sprite3D.prototype.moveTo = function(position) {
-  mat4.translate(this.modelview, this.modelview, position);
 }
 
 LD29.Sprite3D.prototype.tick = function(tick) {};
 
 LD29.Sprite3D.prototype.render = function(projection) {
-  this.sprite3dRenderer.render(this.voxelMap, projection, this.modelview);
+  mat4.multiply(this.matrix, this.modelview, this.animation);
+  this.sprite3dRenderer.render(this.voxelMap, projection, this.matrix);
 }
 
 LD29.Duck = function(sprite3dRenderer) {
   LD29.Sprite3D.call(this, LD29.Duck.sprite3dRenderer, LD29.Duck.voxelMap);
-  mat4.translate(this.modelview, this.modelview, [Math.random() * 60 - 30, 10, -Math.random() * 60 - 20]);
+  mat4.translate(this.modelview, this.modelview, [Math.random() * 20 - 10, 10, -Math.random() * 40 - 40]);
   mat4.rotateY(this.modelview, this.modelview, Math.random() * Math.PI * 2);
 }
 LD29.Duck.prototype = new LD29.Sprite3D();
@@ -249,14 +243,15 @@ LD29.Duck.prototype.tick = function(tick) {
   if ((this.modelview[12] < -10.0 && this.modelview[8] < 0) ||
       (this.modelview[12] > 10.0 && this.modelview[8] > 0) ||
       (this.modelview[14] < -80.0 && this.modelview[10] < 0) ||
-      (this.modelview[14] > -20.0 && this.modelview[10] > 0)) {
+      (this.modelview[14] > -40.0 && this.modelview[10] > 0)) {
     mat4.rotateY(this.modelview, this.modelview, -Math.PI / 32);
   }
-  mat4.rotateX(this.modelview, this.modelview, -Math.cos(tick / Math.PI / 3) * Math.PI / 500);
+  mat4.identity(this.animation);
+  mat4.rotateX(this.animation, this.animation, -Math.cos(tick / Math.PI / 3) * Math.PI / 500);
   if (this.modelview[13] > -10) {
     mat4.translate(this.modelview, this.modelview, [0, -0.2, 0]);
   }
-  if (this.modelview[13] < -9.5) {
+  if (this.modelview[13] < -10) {
     mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3) * 0.1 + 0.075]);
   }
 }
@@ -301,10 +296,11 @@ LD29.Fish.prototype.tick = function(tick) {
   if ((this.modelview[12] < -10.0 && this.modelview[8] < 0) ||
       (this.modelview[12] > 10.0 && this.modelview[8] > 0) ||
       (this.modelview[14] < -80.0 && this.modelview[10] < 0) ||
-      (this.modelview[14] > -20.0 && this.modelview[10] > 0)) {
+      (this.modelview[14] > -40.0 && this.modelview[10] > 0)) {
     mat4.rotateY(this.modelview, this.modelview, Math.PI / 32);
   }
-  mat4.rotateX(this.modelview, this.modelview, -Math.cos(tick / Math.PI / 3) * Math.PI / 500);
+  mat4.identity(this.animation);
+  mat4.scale(this.animation, this.animation, [1.0 - Math.sin(tick / Math.PI / 3) * 0.15, 1.0 - Math.sin(tick / Math.PI / 3) * 0.15, 1.0 + Math.sin(tick / Math.PI / 3) *0.3]);
   mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3) * 0.1 + 0.075]);
 }
 
