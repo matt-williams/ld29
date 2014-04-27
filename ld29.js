@@ -154,6 +154,9 @@ LD29.prototype.handleKeyUp = function(evt) {
       this.rightDown = false;
       break;
   }
+  if ((!this.leftDown) && (!this.diveDown) && (!this.rightDown)) {
+    this.maskKeys = false;
+  }
 }
 
 LD29.prototype.start = function() {
@@ -175,7 +178,7 @@ LD29.prototype.maybeTick = function() {
 }
 
 LD29.prototype.ticked = function(tick) {
-  if (!this.frog && (this.leftDown || this.diveDown || this.rightDown)) {
+  if (!this.frog && (this.leftDown || this.diveDown || this.rightDown) && !this.maskKeys) {
     this.frog = new LD29.Frog();
     this.clearMessage();
     this.sprites.push(this.frog);
@@ -206,6 +209,7 @@ LD29.prototype.ticked = function(tick) {
           this.sprites[jj].deathTick = this.tick + 11;
         }
         this.addInitialSprites();
+        this.maskKeys = true;
       }
       ii--;
     } else {
