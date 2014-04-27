@@ -129,28 +129,30 @@ LD29.prototype.handleMouseMove = function(evt) {
 }
 
 LD29.prototype.handleKeyDown = function(evt) {
-  switch (evt.keyIdentifier) {
-    case 'U+0041':
+  evt = evt || window.event;
+  switch (evt.keyCode) {
+    case 65:
       this.leftDown = true;
       break;
-    case 'U+0053':
+    case 83:
       this.diveDown = true;
       break;
-    case 'U+0044':
+    case 68:
       this.rightDown = true;
       break;
   }
 }
 
 LD29.prototype.handleKeyUp = function(evt) {
-  switch (evt.keyIdentifier) {
-    case 'U+0041':
+  evt = evt || window.event;
+  switch (evt.keyCode) {
+    case 65:
       this.leftDown = false;
       break;
-    case 'U+0053':
+    case 83:
       this.diveDown = false;
       break;
-    case 'U+0044':
+    case 68:
       this.rightDown = false;
       break;
   }
@@ -162,8 +164,8 @@ LD29.prototype.handleKeyUp = function(evt) {
 LD29.prototype.start = function() {
   window.onload = this.wrap(this.render);
   this.canvas.onmousemove = this.wrap(this.handleMouseMove);
-  window.addEventListener("keydown", this.wrap(this.handleKeyDown), true);
-  window.addEventListener("keyup", this.wrap(this.handleKeyUp), true);
+  window.onkeydown = this.wrap(this.handleKeyDown);
+  window.onkeyup = this.wrap(this.handleKeyUp);
   this.lastTick = Date.now();
   window.setInterval(this.wrap(LD29.prototype.maybeTick), LD29.FRAME_PERIOD_MS);
 }
