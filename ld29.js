@@ -209,7 +209,7 @@ LD29.prototype.ticked = function(tick) {
           this.sprites[jj].deathTick = this.tick + 11;
         }
         this.addInitialSprites();
-        this.maskKeys = true;
+        this.maskKeys = this.leftDown || this.diveDown || this.rightDown;
       }
       ii--;
     } else {
