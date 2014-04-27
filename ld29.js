@@ -35,13 +35,16 @@ LD29.prototype.initSprites = function() {
   LD29.Treasure.init(this.sprite3dRenderer);
   LD29.Plant.init(this.sprite3dRenderer);
   LD29.Fish.init(this.sprite3dRenderer);
+  LD29.Frog.init(this.sprite3dRenderer);
   this.sprites = [new LD29.Duck(),
                   new LD29.Duck(),
                   new LD29.Duck(),
                   new LD29.Treasure(),
                   new LD29.Plant(),
                   new LD29.Fish(),
-                  new LD29.Fish()];
+                  new LD29.Fish(),
+                  new LD29.Fish(),
+                  new LD29.Frog()];
 }
 
 LD29.prototype.initState = function() {
@@ -231,6 +234,7 @@ LD29.Duck = function(sprite3dRenderer) {
   LD29.Sprite3D.call(this, LD29.Duck.sprite3dRenderer, LD29.Duck.voxelMap);
   mat4.translate(this.modelview, this.modelview, [Math.random() * 20 - 10, 10, -Math.random() * 40 - 40]);
   mat4.rotateY(this.modelview, this.modelview, Math.random() * Math.PI * 2);
+  this.phase = Math.random() * Math.PI * 2;
 }
 LD29.Duck.prototype = new LD29.Sprite3D();
 
@@ -247,12 +251,12 @@ LD29.Duck.prototype.tick = function(tick) {
     mat4.rotateY(this.modelview, this.modelview, -Math.PI / 32);
   }
   mat4.identity(this.animation);
-  mat4.rotateX(this.animation, this.animation, -Math.cos(tick / Math.PI / 3) * Math.PI / 10);
+  mat4.rotateX(this.animation, this.animation, -Math.cos(tick / Math.PI / 3 + this.phase) * Math.PI / 10);
   if (this.modelview[13] > -10) {
     mat4.translate(this.modelview, this.modelview, [0, -0.2, 0]);
   }
   if (this.modelview[13] < -10) {
-    mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3) * 0.1 + 0.075]);
+    mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3 + this.phase) * 0.1 + 0.075]);
   }
 }
 
@@ -284,6 +288,7 @@ LD29.Fish = function(sprite3dRenderer) {
   LD29.Sprite3D.call(this, LD29.Fish.sprite3dRenderer, LD29.Fish.voxelMap);
   mat4.translate(this.modelview, this.modelview, [Math.random() * 60 - 30, -12, -Math.random() * 60 - 20]);
   mat4.rotateY(this.modelview, this.modelview, Math.random() * Math.PI * 2);
+  this.phase = Math.random() * Math.PI * 2;
 }
 LD29.Fish.prototype = new LD29.Sprite3D();
 
@@ -300,8 +305,33 @@ LD29.Fish.prototype.tick = function(tick) {
     mat4.rotateY(this.modelview, this.modelview, Math.PI / 32);
   }
   mat4.identity(this.animation);
-  mat4.scale(this.animation, this.animation, [1.0 - Math.sin(tick / Math.PI / 3) * 0.15, 1.0 - Math.sin(tick / Math.PI / 3) * 0.15, 1.0 + Math.sin(tick / Math.PI / 3) *0.3]);
-  mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3) * 0.1 + 0.075]);
+  mat4.scale(this.animation, this.animation, [1.0 - Math.sin(tick / Math.PI / 3 + this.phase) * 0.15, 1.0 - Math.sin(tick / Math.PI / 3 + this.phase) * 0.15, 1.0 + Math.sin(tick / Math.PI / 3 + this.phase) *0.3]);
+  mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3 + this.phase) * 0.1 + 0.075]);
+}
+
+LD29.Frog = function(sprite3dRenderer) {
+  LD29.Sprite3D.call(this, LD29.Plant.sprite3dRenderer, LD29.Frog.voxelMap);
+  mat4.translate(this.modelview, this.modelview, [Math.random() * 60 - 30, -12, -Math.random() * 60 - 20]);
+  mat4.rotateY(this.modelview, this.modelview, Math.random() * Math.PI * 2);
+  this.phase = Math.random() * Math.PI * 2;
+}
+LD29.Frog.prototype = new LD29.Sprite3D();
+
+LD29.Frog.init = function(sprite3dRenderer) {
+  LD29.Frog.sprite3dRenderer = sprite3dRenderer;
+  LD29.Frog.voxelMap = new LD29.Texture(sprite3dRenderer.gl, "frog.voxelmap.png");
+}
+
+LD29.Frog.prototype.tick = function(tick) {
+  if ((this.modelview[12] < -10.0 && this.modelview[8] < 0) ||
+      (this.modelview[12] > 10.0 && this.modelview[8] > 0) ||
+      (this.modelview[14] < -80.0 && this.modelview[10] < 0) ||
+      (this.modelview[14] > -40.0 && this.modelview[10] > 0)) {
+    mat4.rotateY(this.modelview, this.modelview, Math.PI / 32);
+  }
+  mat4.identity(this.animation);
+  mat4.scale(this.animation, this.animation, [1.0 - Math.sin(tick / Math.PI / 3 + this.phase) * 0.15, 1.0 - Math.sin(tick / Math.PI / 3 + this.phase) * 0.15, 1.0 + Math.sin(tick / Math.PI / 3 + this.phase) *0.3]);
+  mat4.translate(this.modelview, this.modelview, [0, 0, Math.sin(tick / Math.PI / 3 + this.phase) * 0.1 + 0.075]);
 }
 
 LD29.Texture = function(gl, url) {
