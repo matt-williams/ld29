@@ -674,7 +674,7 @@ LD29.Frog.prototype.controls = function(leftDown, diveDown, rightDown) {
   }
   if (diveDown &&
       (this.modelview[13] > LD29.SAND_DEPTH + 0.5) &&
-      (this.oxygen > 200)) {
+      (this.oxygen > 0)) {
     this.yv += -0.05;
   }
 }
