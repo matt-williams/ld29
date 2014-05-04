@@ -4,7 +4,7 @@ LD29 = function(canvas) {
   this.start();
 }
 
-LD29.HALF_FOV = 0.25;
+LD29.HALF_FOV = 0.1;
 LD29.FRAME_PERIOD_MS = 20;
 LD29.PLAY_AREA = [-50, -100, 50, -20];
 LD29.WATER_DEPTH = -40;
@@ -379,43 +379,51 @@ LD29.Sprite3DRenderer = function(gl) {
   this.program = new LD29.Program(
     gl,
     ["uniform mat4 matrix;",
+     "uniform highp vec3 rayOrigin;",
      "attribute vec3 pos;",
-     "varying highp vec3 nearPosition;",
+     "varying lowp vec3 nearPosition;",
+     "varying highp vec3 rayVector;",
      "void main() {",
      "  gl_Position = matrix * vec4(pos, 1);",
      "  nearPosition = pos;",
+     "  rayVector = pos - rayOrigin;",
      "}"],
-    ["const lowp float VOXEL_POSITION_MIN = 0.0;",
-     "const lowp float VOXEL_POSITION_MAX = 7.0;",
+    ["const lowp float VOXEL_POSITION_MIN = -0.5;",
+     "const lowp float VOXEL_POSITION_MAX = 0.375;",
      "const int MAX_ITERATIONS = 22;", // A ray can pass through at most 22 cells (intuitively, but verified through testing)
      "uniform highp vec3 rayOrigin;",
-     "uniform mediump vec2 scale;",
-     "uniform mediump vec2 offset;",
+     "uniform mediump mat4 textureMatrix;",
      "uniform sampler2D voxelMap;",
-     "varying highp vec3 nearPosition;",
-     "highp float min3(highp vec3 v) {",
+     "varying lowp vec3 nearPosition;",
+     "varying highp vec3 rayVector;",
+     "lowp float min3(lowp vec3 v) {",
      "  return min(min(v.x, v.y), v.z);",
      "}",
-     "highp float max3(highp vec3 v) {",
+     "lowp float max3(lowp vec3 v) {",
      "  return max(max(v.x, v.y), v.z);",
      "}",
-     "highp vec3 intersection(highp vec3 rayOrigin, highp vec3 rayDirection, highp vec3 bound) {",
+     "lowp vec3 intersect(highp vec3 rayOrigin, highp vec3 rayDirection, lowp vec3 bound) {",
      " return (bound - rayOrigin) / rayDirection;",
      "}",
-     "highp vec3 nearPositionToFaceNormal(highp vec3 nearPosition, lowp vec3 rayDirection) {",
-     "  return step(max3(abs(nearPosition)), abs(nearPosition)) * sign(rayDirection);",
+     "lowp vec3 nearPositionToFaceNormal(lowp vec3 nearPosition, lowp vec3 rayDirection) {",
+     "  return step(0.5, abs(nearPosition)) * sign(rayDirection);",
+//     "  return step(max3(abs(nearPosition)), abs(nearPosition)) * sign(rayDirection);",
      "}",
-     "highp vec3 intersectionToFaceNormal(highp vec3 intersection, lowp vec3 rayDirection) {",
+     "lowp vec3 intersectionToFaceNormal(lowp vec3 intersection, lowp vec3 rayDirection) {",
      "  return step(-min3(intersection), -intersection) * sign(rayDirection);",
      "}",
-     "lowp vec2 voxelPositionToTextureCoord(lowp vec3 voxelPosition) {",
-     "  return vec2((voxelPosition.x + 0.5) / 64.0 + (VOXEL_POSITION_MAX - voxelPosition.z) / 8.0, (VOXEL_POSITION_MAX - voxelPosition.y + 0.5) / 8.0);",
+     "lowp vec2 voxelPositionToTextureCoord(lowp vec3 voxelPosition, mediump mat4 textureMatrix) {",
+     "  return (textureMatrix * vec4(voxelPosition, 1)).xy;",
      "}",
+//     "lowp vec2 voxelPositionToTextureCoord(lowp vec3 voxelPosition) {",
+//     "lowp vec2 voxelPositionToTextureCoord(lowp vec3 voxelPosition, mediump mat4 textureMatrix) {",
+//     "  return vec2((voxelPosition.x + 0.5) / 64.0 + (VOXEL_POSITION_MAX - voxelPosition.z) / 8.0, (VOXEL_POSITION_MAX - voxelPosition.y + 0.5) / 8.0);",
+//     "}",
      "lowp vec3 voxelPositionToBound(lowp vec3 voxelPosition, lowp vec3 rayDirection) {",
-     "  return (voxelPosition + (sign(rayDirection) * 0.5 + 0.5)) / 8.0 - 0.5;",
+     "  return voxelPosition + (sign(rayDirection) * 0.5 + 0.5);",
      "}",
-     "lowp vec3 intersectedFaceNormal(highp vec3 rayOrigin, highp vec3 rayDirection, highp vec3 bound) {",
-     "  highp vec3 intersection = intersection(rayOrigin, rayDirection, bound);",
+     "lowp vec3 intersectedFaceNormal(highp vec3 rayOrigin, highp vec3 rayDirection, lowp vec3 bound) {",
+     "  highp vec3 intersection = intersect(rayOrigin, rayDirection, bound);",
      "  return intersectionToFaceNormal(intersection, rayDirection);",
      "}",
      "lowp vec3 clampVoxelPosition(lowp vec3 voxelPosition) {",
@@ -424,25 +432,62 @@ LD29.Sprite3DRenderer = function(gl) {
      "bool voxelPositionInRange(lowp vec3 voxelPosition) {",
      "  return clampVoxelPosition(voxelPosition) == voxelPosition;",
      "}",
+     "lowp vec3 intersectionToPoint(lowp vec3 intersection, highp vec3 rayOrigin, highp vec3 rayDirection) {",
+     "  return rayOrigin + min3(intersection) * rayDirection;",
+     "}",
+     "bool pointInVolume(lowp vec3 point, lowp vec3 voxelPosition, lowp vec3 normal) {",
+//     "  return true;",
+//     "  return voxelPosition.x > point.x;",
+//     "  return length(point - voxelPosition / 8.0 + 0.5) > 2.0;",
+     "  return dot(point - (voxelPosition + 0.0625), normal) < 5.0;",
+//     "  return dot(point - (voxelPosition + 0.0625), normalize(normal)) < 0.5;",
+//     "  return dot(intersection - ((voxelPosition + 0.5) / 8.0 - 0.5), normalize(normal)) > (length(normal) - 0.25) * 2.0;",
+//     "  return dot(intersection - (voxelPosition / 8.0 - 0.375), vec3(1, 0, 0)) > length(normal);",
+     "}",
      "lowp float lighting(highp vec3 rayDirection, lowp vec3 faceNormal) {",
-     "  return dot(faceNormal, rayDirection) * 0.5 + 0.5;",
+     "  return 1.0;",
+//     "  return dot(faceNormal, rayDirection) * 0.5 + 0.5;",
      "}",
      "void main() {",
-     "  highp vec3 rayDirection = normalize(nearPosition - rayOrigin);",
+     "  highp vec3 rayDirection = normalize(rayVector);",
+//     "  highp vec3 rayDirection = normalize(nearPosition - rayOrigin);",
+     "  lowp vec3 intersectionPoint = nearPosition;",
      "  lowp vec3 faceNormal = nearPositionToFaceNormal(nearPosition, rayDirection);",
-     "  lowp vec3 voxelPosition = clampVoxelPosition(floor((nearPosition + 0.5) * 8.0));",
-     "  for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration) {",
-     "    lowp vec4 voxelColor = texture2D(voxelMap, voxelPositionToTextureCoord(voxelPosition) * scale + offset);",
-     "    if (voxelColor.a > 0.0) {",
-     "      gl_FragColor = vec4(voxelColor.rgb * lighting(rayDirection, faceNormal), voxelColor.a);",
+     "  lowp vec3 voxelPosition = clampVoxelPosition(floor(nearPosition * 8.0) / 8.0);",
+     "  for (lowp int iteration = 0; iteration < MAX_ITERATIONS; ++iteration) {",
+     "    lowp vec4 voxelColor = texture2D(voxelMap, voxelPositionToTextureCoord(voxelPosition, textureMatrix));",
+     "    lowp vec3 normal = normalize(voxelColor.rgb - 0.5);",
+     "    if (pointInVolume(intersectionPoint, voxelPosition, normal)) {",
+     "      gl_FragColor = vec4(voxelColor.rgb * lighting(rayDirection, faceNormal), 1);",
      "      return;",
      "    }",
      "    lowp vec3 bound = voxelPositionToBound(voxelPosition, rayDirection);",
-     "    faceNormal = intersectedFaceNormal(rayOrigin, rayDirection, bound);",
+     "    lowp vec3 intersection = intersect(rayOrigin, rayDirection, bound);",
+//     "    lowp vec3 oldIntersectionPoint = intersectionPoint;",
+     "    intersectionPoint = intersectionToPoint(intersection, rayOrigin, rayDirection);",
+
+/*
+     "    if (pointInVolume(oldIntersectionPoint, voxelPosition, normal) ||",
+     "        pointInVolume(intersectionPoint, voxelPosition, normal)) {",
+     "      gl_FragColor = vec4(voxelColor.rgb * lighting(rayDirection, normal), 1);",
+     "      return;",
+     "    }",
+*/
+
+     "    if (pointInVolume(intersectionPoint, voxelPosition, normal)) {",
+     "      gl_FragColor = vec4(voxelColor.rgb * lighting(rayDirection, normal), 1);",
+     "      return;",
+     "    }",
+
+
+
+     "    faceNormal = intersectionToFaceNormal(intersection, rayDirection);",
      "    voxelPosition += faceNormal;", 
+
      "    if (!voxelPositionInRange(voxelPosition)) {",
      "      discard;",
      "    }",
+
      "  }",
      "  discard;",
      "}"]);
@@ -469,12 +514,17 @@ LD29.Sprite3DRenderer.prototype.render = function(voxelMap, scale, offset, proje
   mat4.invert(this.matrix, modelview);
   vec3.transformMat4(this.vector, eye, this.matrix);
   mat4.multiply(this.matrix, projection, modelview);
+  var textureMatrix = mat4.create();
+  mat4.translate(textureMatrix, textureMatrix, [offset[0], offset[1], 0]);
+  mat4.scale(textureMatrix, textureMatrix, [scale[0], scale[1], scale[0]]);
+  mat4.multiply(textureMatrix, textureMatrix, [1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1]);
+  mat4.translate(textureMatrix, textureMatrix, [1/16, 0.5 - 1/16, 0.5 - 2/16]);
+  mat4.scale(textureMatrix, textureMatrix, [1/8, -1, -1]);
   voxelMap.use(gl.TEXTURE0);
   this.program.use({matrix: this.matrix,
                     rayOrigin: this.vector,
                     voxelMap: 0,
-                    scale: scale,
-                    offset: offset},
+                    textureMatrix: textureMatrix},
                    {pos: this.cubeVertices});
   gl.drawArrays(gl.TRIANGLES, 0, LD29.Sprite3DRenderer.CUBE_VERTICES.length / 3);
 }
