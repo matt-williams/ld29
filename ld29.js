@@ -386,7 +386,7 @@ LD29.Sprite3DRenderer = function(gl) {
      "void main() {",
      "  gl_Position = matrix * vec4(pos, 1);",
      "  nearIntersection = pos;",
-     "  rayVector = pos - rayOrigin;",
+     "  rayVector = nearIntersection - rayOrigin;",
      "}"],
     ["const int MAX_ITERATIONS = 22;",
      "",
@@ -407,7 +407,7 @@ LD29.Sprite3DRenderer = function(gl) {
      "  highp vec3 minusSignRayDirection = -signRayDirection;",
      "  highp vec3 halfSignRayDirection = signRayDirection * 0.5;",
      "  highp vec3 nearBound = mix(highBound, lowBound, halfSignRayDirection + 0.5);",
-     "  highp vec3 rayEntryNormal = step(nearIntersection, nearBound) * minusSignRayDirection;",
+     "  highp vec3 rayEntryNormal = step(nearBound * minusSignRayDirection, nearIntersection * minusSignRayDirection) * minusSignRayDirection;",
      "  highp vec3 farBound = mix(lowBound, highBound, halfSignRayDirection + 0.5);",
      "  highp vec3 farDistances = (farBound - nearIntersection) / rayDirection;",
      "  highp float farDistance = min(min(farDistances.x, farDistances.y), farDistances.z);",
@@ -422,20 +422,31 @@ LD29.Sprite3DRenderer = function(gl) {
      "    highp vec3 rayEntryOffset = voxelPosition - rayPosition;",
      "    highp vec4 surface = texture2D(voxelSurfaceMap, textureCoord);",
      "    surfaceNormal = surface.xyz;",
+     "    highp vec3 voxelBound = voxelPosition + halfSignRayDirection;",
+     "    highp vec3 rayDistanceDeltas = (voxelBound - rayPosition) / rayDirection;",
+     "    highp float rayDistanceDelta = min(min(rayDistanceDeltas.x, rayDistanceDeltas.y), rayDistanceDeltas.z);",
+     "    rayPosition += rayDistanceDelta * rayDirection;",
+     "    rayEntryNormal = step(-rayDistanceDelta, -rayDistanceDeltas) * minusSignRayDirection;",
+     "    rayDistance += rayDistanceDelta;",
+"if ((surface.a > 0.0) || (rayDistance >= farDistance)) { gl_FragColor = surface; break; }",
+"}",
+"if (rayDistance >= farDistance) { discard; }",
+/*
      "    surfaceDistance = surface.a - 0.5;",
      "    highp vec3 voxelBound = voxelPosition + halfSignRayDirection;",
      "    highp vec3 rayDistanceDeltas = (voxelBound - rayPosition) / rayDirection;",
      "    highp float rayDistanceDelta = min(min(rayDistanceDeltas.x, rayDistanceDeltas.y), rayDistanceDeltas.z);",
      "    rayPosition += rayDistanceDelta * rayDirection;",
      "    highp vec3 rayExitOffset = voxelPosition - rayPosition;",
-     "    rayEntryDistance = dot(rayEntryOffset, surfaceNormal);",
-     "    rayExitDistance = dot(rayExitOffset, surfaceNormal);",
+     "    rayEntryDistance = 0.0 * dot(rayEntryOffset, surfaceNormal);",
+     "    rayExitDistance = 0.0 * dot(rayExitOffset, surfaceNormal);",
+     "    rayDistance += rayDistanceDelta;",
      "    if ((rayEntryDistance < surfaceDistance) ||",
-     "        (rayExitDistance < surfaceDistance)) {",
+     "        (rayExitDistance < surfaceDistance) ||",
+     "        (rayDistance >= farDistance)) {",
      "      break;",
      "    }",
-     "    rayEntryNormal = step(1.0, abs(rayPosition - voxelPosition)) * minusSignRayDirection;",
-     "    rayDistance += rayDistanceDelta;",
+     "    rayEntryNormal = step(0.5, abs(rayPosition - voxelPosition)) * minusSignRayDirection;",
      "  }",
      "  if ((rayEntryDistance < surfaceDistance) ||",
      "      (rayExitDistance < surfaceDistance)) {",
@@ -450,12 +461,14 @@ LD29.Sprite3DRenderer = function(gl) {
      "  } else {",
      "    discard;",
      "  }",
+*/
      "}"]);
   this.cubeVertices = new LD29.StaticBuffer(this.gl, LD29.Sprite3DRenderer.CUBE_VERTICES);
   this.matrix = mat4.create();
   this.vector = vec3.create();
 }
 
+/*
 LD29.Sprite3DRenderer.CUBE_VERTICES = [-0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5, -0.5, -0.5,
                                         0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  0.5, -0.5,
                                         0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5,  0.5,
@@ -468,6 +481,19 @@ LD29.Sprite3DRenderer.CUBE_VERTICES = [-0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
                                        -0.5, -0.5, -0.5,  0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
                                        -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5, -0.5,
                                        -0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5];
+*/
+LD29.Sprite3DRenderer.CUBE_VERTICES = [0.0, 0.0, 0.0, 0.0, 8.0, 0.0, 8.0, 0.0, 0.0,
+                                       8.0, 0.0, 0.0, 0.0, 8.0, 0.0, 8.0, 8.0, 0.0,
+                                       8.0, 0.0, 0.0, 8.0, 8.0, 0.0, 8.0, 0.0, 8.0,
+                                       8.0, 0.0, 8.0, 8.0, 8.0, 0.0, 8.0, 8.0, 8.0,
+                                       8.0, 0.0, 8.0, 8.0, 8.0, 8.0, 0.0, 0.0, 8.0,
+                                       0.0, 0.0, 8.0, 8.0, 8.0, 8.0, 0.0, 8.0, 8.0,
+                                       0.0, 0.0, 8.0, 0.0, 8.0, 8.0, 0.0, 0.0, 0.0,
+                                       0.0, 0.0, 0.0, 0.0, 8.0, 8.0, 0.0, 8.0, 0.0,
+                                       0.0, 0.0, 8.0, 0.0, 0.0, 0.0, 8.0, 0.0, 8.0,
+                                       0.0, 0.0, 0.0, 8.0, 0.0, 0.0, 8.0, 0.0, 8.0,
+                                       0.0, 8.0, 8.0, 8.0, 8.0, 8.0, 0.0, 8.0, 0.0,
+                                       0.0, 8.0, 0.0, 8.0, 8.0, 8.0, 8.0, 8.0, 0.0];
 
 LD29.Sprite3DRenderer.prototype.render = function(voxelMap, scale, offset, projection, eye, modelview) {
   var gl = this.gl;
@@ -475,11 +501,12 @@ LD29.Sprite3DRenderer.prototype.render = function(voxelMap, scale, offset, proje
   vec3.transformMat4(this.vector, eye, this.matrix);
   mat4.multiply(this.matrix, projection, modelview);
   var textureMatrix = mat4.create();
+  mat4.scale(textureMatrix, textureMatrix, [1/64, 1/8, 1/8]);
+  mat4.translate(textureMatrix, textureMatrix, [0, 0, 0]);
+  mat4.multiply(textureMatrix, textureMatrix, [1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
+  mat4.translate(textureMatrix, textureMatrix, [1/128, 1/16, 0]);
+  mat4.scale(textureMatrix, textureMatrix, [scale[0], scale[1], 0]);
   mat4.translate(textureMatrix, textureMatrix, [offset[0], offset[1], 0]);
-  mat4.scale(textureMatrix, textureMatrix, [scale[0], scale[1], scale[0]]);
-  mat4.multiply(textureMatrix, textureMatrix, [1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1]);
-  mat4.translate(textureMatrix, textureMatrix, [1/16, 0.5 - 1/16, 0.5 - 2/16]);
-  mat4.scale(textureMatrix, textureMatrix, [1/8, -1, -1]);
   voxelMap.use(gl.TEXTURE0);
   this.program.use({matrix: this.matrix,
                     lowBound: [0, 0, 0],
@@ -557,7 +584,8 @@ LD29.Sprite3D.prototype.bearTowardsTarget = function() {
 LD29.Sprite3D.prototype.collide = function(otherSprite, thisPos, otherPos, tick) {};
 
 LD29.Sprite3D.prototype.render = function(projection, eye) {
-  mat4.multiply(this.matrix, this.modelview, this.animation);
+//  mat4.multiply(this.matrix, this.modelview, this.animation);
+  mat4.scale(this.matrix, this.modelview, [1/8, 1/8, 1/8]);
   this.sprite3dRenderer.render(this.voxelMap, this.scale, this.offset, projection, eye, this.matrix);
 }
 
