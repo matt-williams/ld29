@@ -379,16 +379,17 @@ LD29.Sprite3DRenderer = function(gl) {
   this.program = new LD29.Program(
     gl,
     ["uniform mat4 matrix;",
+     "uniform lowp vec3 size;",
      "attribute vec3 pos;",
      "varying highp vec3 nearPosition;",
      "void main() {",
      "  gl_Position = matrix * vec4(pos, 1);",
-     "  nearPosition = pos * 8.0;",
+     "  nearPosition = pos * size;",
      "}"],
-    ["const int MAX_ITERATIONS = 22;", // A ray can pass through at most 22 cells (intuitively, but verified through testing)
+    ["const int MAX_ITERATIONS = 46;", // A ray can pass through at most 46 cells (intuitively, but verified through testing)
      "uniform highp vec3 rayOrigin;",
-     "uniform mediump vec2 scale;",
-     "uniform mediump vec2 offset;",
+     "uniform lowp vec3 size;",
+     "uniform mediump mat4 voxelToTexelMatrix;",
      "uniform sampler2D voxelMap;",
      "varying highp vec3 nearPosition;",
      "highp float min3(highp vec3 v) {",
@@ -397,18 +398,15 @@ LD29.Sprite3DRenderer = function(gl) {
      "highp float max3(highp vec3 v) {",
      "  return max(max(v.x, v.y), v.z);",
      "}",
-     "lowp vec2 voxelPositionToTextureCoord(lowp vec3 voxelPosition) {",
-     "  return vec2((voxelPosition.x + 4.5) / 64.0 + (3.0 - voxelPosition.z) / 8.0, (3.5 - voxelPosition.y) / 8.0);",
-     "}",
      "void main() {",
-     "  highp vec3 rayDirection = normalize(nearPosition - rayOrigin * 8.0);",
+     "  highp vec3 rayDirection = normalize(nearPosition - rayOrigin * size);",
      "  lowp vec3 signRayDirection = sign(rayDirection);",
-     "  highp float farRayLength = min3((signRayDirection * 4.0 - nearPosition) / rayDirection);",
+     "  lowp vec3 cubeRayDirection = signRayDirection * size;",
+     "  highp float farRayLength = min3((0.5 * cubeRayDirection - nearPosition) / rayDirection);",
      // Fudge factor - rounding errors accumulate and can cause graphical artifacts
      "  farRayLength *= 0.999;",
      "  highp float rayLength = 0.0;",
-     // 16.0 just needs to be bigger than any possible cube
-     "  highp vec3 minusDistanceToBound = -mod(abs(nearPosition - signRayDirection * 16.0), 1.0);",
+     "  highp vec3 minusDistanceToBound = -mod(abs(nearPosition - signRayDirection - cubeRayDirection), 1.0);",
      "  lowp vec3 absFaceNormal = step(0.0, minusDistanceToBound);",
      "  highp vec3 minusDistanceToNextBound = minusDistanceToBound - absFaceNormal;",
      "  highp vec3 minusRayLengthDeltaToBound = minusDistanceToNextBound / abs(rayDirection);",
@@ -426,7 +424,7 @@ LD29.Sprite3DRenderer = function(gl) {
      // Is this most efficient way to average?
      "    lowp vec3 voxelPosition = floor(nearPosition + halfRayDirection * (rayLength + oldRayLength));",
      // Cheaper to pre-multiply scale and offset?
-     "    voxelColor = texture2D(voxelMap, voxelPositionToTextureCoord(voxelPosition) * scale + offset);",
+     "    voxelColor = texture2D(voxelMap, (voxelToTexelMatrix * vec4(voxelPosition, 1)).xy);",
      "    if (voxelColor.a > 0.0) {",
      "      break;",
      "    }",
@@ -457,22 +455,28 @@ LD29.Sprite3DRenderer.CUBE_VERTICES = [-0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
                                        -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5, -0.5,
                                        -0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5];
 
-LD29.Sprite3DRenderer.prototype.render = function(voxelMap, scale, offset, projection, eye, modelview) {
+LD29.Sprite3DRenderer.prototype.render = function(voxelMap, size, scale, offset, projection, eye, modelview) {
   var gl = this.gl;
+  size = size || 8;
+  size = (size instanceof Array) ? size : [size, size, size];
   mat4.invert(this.matrix, modelview);
   vec3.transformMat4(this.vector, eye, this.matrix);
   mat4.multiply(this.matrix, projection, modelview);
   voxelMap.use(gl.TEXTURE0);
+  voxelToTexelMatrix = [scale[0] / size[0] / size[2], 0.0, 0.0, 0.0,
+                        0.0, -scale[1] / size[1], 0.0, 0.0,
+                        -scale[0] / size[2], 0.0, 0.0, 0.0,
+                        scale[0] * ((0.5 / size[0] - 0.5) / size[2] + 0.5) + offset[0], scale[1] * (-0.5 / size[1] + 0.5) + offset[1], 0.0, 1.0];
   this.program.use({matrix: this.matrix,
                     rayOrigin: this.vector,
-                    voxelMap: 0,
-                    scale: scale,
-                    offset: offset},
+                    size: size,
+                    voxelToTexelMatrix: voxelToTexelMatrix,
+                    voxelMap: 0},
                    {pos: this.cubeVertices});
   gl.drawArrays(gl.TRIANGLES, 0, LD29.Sprite3DRenderer.CUBE_VERTICES.length / 3);
 }
 
-LD29.Sprite3D = function(sprite3dRenderer, voxelMap, spinOnSpawn, scaleOnSpawn, spinOnDie, scaleOnDie, scale, offset, modelview, animation) {
+LD29.Sprite3D = function(sprite3dRenderer, voxelMap, size, spinOnSpawn, scaleOnSpawn, spinOnDie, scaleOnDie, scale, offset, modelview, animation) {
   if (arguments.length > 0) {
     this.sprite3dRenderer = sprite3dRenderer;
     this.voxelMap = voxelMap;
@@ -480,6 +484,7 @@ LD29.Sprite3D = function(sprite3dRenderer, voxelMap, spinOnSpawn, scaleOnSpawn, 
     this.scaleOnSpawn = scaleOnSpawn;
     this.spinOnDie = spinOnDie;
     this.scaleOnDie = scaleOnDie;
+    this.size = size || 8;
     this.scale = scale || [1, 1];
     this.offset = offset || [0, 0];
     this.modelview = modelview || mat4.create();
@@ -538,7 +543,7 @@ LD29.Sprite3D.prototype.collide = function(otherSprite, thisPos, otherPos, tick)
 
 LD29.Sprite3D.prototype.render = function(projection, eye) {
   mat4.multiply(this.matrix, this.modelview, this.animation);
-  this.sprite3dRenderer.render(this.voxelMap, this.scale, this.offset, projection, eye, this.matrix);
+  this.sprite3dRenderer.render(this.voxelMap, this.size, this.scale, this.offset, projection, eye, this.matrix);
 }
 
 LD29.Sprite3D.prototype.positionRandomly = function(xzRange, y, rRange) {
@@ -548,7 +553,7 @@ LD29.Sprite3D.prototype.positionRandomly = function(xzRange, y, rRange) {
 }
 
 LD29.Duck = function(ld29) {
-  LD29.Sprite3D.call(this, LD29.Duck.sprite3dRenderer, LD29.Duck.voxelMap, false, true, true, true);
+  LD29.Sprite3D.call(this, LD29.Duck.sprite3dRenderer, LD29.Duck.voxelMap, 16, false, true, true, true);
   this.ld29 = ld29;
   this.positionRandomly(LD29.PLAY_AREA, LD29.WATER_DEPTH + 10);
   this.phase = Math.random() * Math.PI * 2;
@@ -592,7 +597,7 @@ LD29.Duck.prototype.tick = function(tick) {
 }
 
 LD29.Treasure = function() {
-  LD29.Sprite3D.call(this, LD29.Treasure.sprite3dRenderer, LD29.Treasure.voxelMap, true, true, true, true);
+  LD29.Sprite3D.call(this, LD29.Treasure.sprite3dRenderer, LD29.Treasure.voxelMap, 8, true, true, true, true);
   this.positionRandomly(LD29.PLAY_AREA, LD29.SAND_DEPTH + 0.5, [-Math.PI / 4, Math.PI / 4]);
 }
 LD29.Treasure.prototype = new LD29.Sprite3D();
@@ -603,7 +608,7 @@ LD29.Treasure.init = function(sprite3dRenderer) {
 }
 
 LD29.Plant = function() {
-  LD29.Sprite3D.call(this, LD29.Plant.sprite3dRenderer, LD29.Plant.voxelMap, true, true, true, true);
+  LD29.Sprite3D.call(this, LD29.Plant.sprite3dRenderer, LD29.Plant.voxelMap, 8, true, true, true, true);
   this.positionRandomly(LD29.PLAY_AREA, LD29.SAND_DEPTH + 0.5);
 }
 LD29.Plant.prototype = new LD29.Sprite3D();
@@ -614,7 +619,7 @@ LD29.Plant.init = function(sprite3dRenderer) {
 }
 
 LD29.Fish = function() {
-  LD29.Sprite3D.call(this, LD29.Fish.sprite3dRenderer, LD29.Fish.voxelMap, false, true, false, true);
+  LD29.Sprite3D.call(this, LD29.Fish.sprite3dRenderer, LD29.Fish.voxelMap, 8, false, true, false, true);
   this.positionRandomly(LD29.PLAY_AREA, Math.random() * (LD29.WATER_DEPTH - LD29.SAND_DEPTH - 2) + LD29.SAND_DEPTH + 0.5);
   this.phase = Math.random() * Math.PI * 2;
   this.selectTarget(LD29.PLAY_AREA);
@@ -644,7 +649,7 @@ LD29.Fish.prototype.tick = function(tick) {
 }
 
 LD29.Frog = function() {
-  LD29.Sprite3D.call(this, LD29.Plant.sprite3dRenderer, LD29.Frog.voxelMap, false, true, true, true);
+  LD29.Sprite3D.call(this, LD29.Plant.sprite3dRenderer, LD29.Frog.voxelMap, 8, false, true, true, true);
   mat4.translate(this.modelview, this.modelview, [(LD29.PLAY_AREA[0] + LD29.PLAY_AREA[2]) / 2, LD29.WATER_DEPTH + 2, (LD29.PLAY_AREA[1] + LD29.PLAY_AREA[3]) / 2]);
   this.phase = Math.random() * Math.PI * 2;
   this.yv = 0;
@@ -724,7 +729,7 @@ LD29.Font = function(character, position) {
   code = ((code >= LD29.Font.CHAR_A) && (code <= LD29.Font.CHAR_Z)) ? code - LD29.Font.CHAR_A :
          ((code >= LD29.Font.CHAR_0) && (code <= LD29.Font.CHAR_9)) ? code - LD29.Font.CHAR_0 + 26 :
          39;
-  LD29.Sprite3D.call(this, LD29.Font.sprite3dRenderer, LD29.Font.voxelMap, true, true, true, true, [1, 1 / 40], [0, code / 40]);
+  LD29.Sprite3D.call(this, LD29.Font.sprite3dRenderer, LD29.Font.voxelMap, 8, true, true, true, true, [1, 1 / 40], [0, code / 40]);
   mat4.translate(this.modelview, this.modelview, [position[0] * 1.5 - 15, position[1] * -1.5 - 23, -50]);
 }
 LD29.Font.prototype = new LD29.Sprite3D();
