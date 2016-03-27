@@ -93,6 +93,13 @@ LD29.prototype.clearMessage = function() {
   }
 }
 
+LD29.prototype.handleInput = function(inputX, inputY, buttons) {
+  LD.prototype.handleInput.call(this, inputX, inputY, buttons);
+  if ((!this.leftDown()) && (!this.diveDown()) && (!this.rightDown())) {
+    this.maskKeys = false;
+  }
+}
+
 LD29.prototype.handleKeyUp = function(keyCode) {
   LD.prototype.handleKeyUp.call(this, keyCode);
   if ((!this.leftDown()) && (!this.diveDown()) && (!this.rightDown())) {
