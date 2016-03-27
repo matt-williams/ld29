@@ -95,16 +95,35 @@ LD29.prototype.clearMessage = function() {
 
 LD29.prototype.handleKeyUp = function(keyCode) {
   LD.prototype.handleKeyUp.call(this, keyCode);
-  if ((!this.keysDown["" + LD29.KEY_LEFT]) && (!this.keysDown["" + LD29.KEY_DIVE]) && (!this.keysDown["" + LD29.KEY_RIGHT])) {
+  if ((!this.leftDown()) && (!this.diveDown()) && (!this.rightDown())) {
     this.maskKeys = false;
   }
 }
 
+LD29.prototype.leftDown = function() {
+  return (!!this.keysDown["" + LD29.KEY_LEFT]) ||
+         ((this.buttons & 1) &&
+          (this.inputX <= -0.333));
+}
+
+LD29.prototype.diveDown = function() {
+  return (!!this.keysDown["" + LD29.KEY_DIVE]) ||
+         ((this.buttons & 1) &&
+          (this.inputX > -0.333) &&
+          (this.inputX <= 0.333));
+}
+
+LD29.prototype.rightDown = function() {
+  return (!!this.keysDown["" + LD29.KEY_RIGHT]) ||
+         ((this.buttons & 1) &&
+          (this.inputX > 0.333));
+}
+
 LD29.prototype.ticked = function(tick) {
   LD.prototype.ticked.call(this, tick);
-  var leftDown = !!this.keysDown["" + LD29.KEY_LEFT];
-  var diveDown = !!this.keysDown["" + LD29.KEY_DIVE];
-  var rightDown = !!this.keysDown["" + LD29.KEY_RIGHT];
+  var leftDown = this.leftDown();
+  var diveDown = this.diveDown();
+  var rightDown = this.rightDown();
   if (!this.frog && (leftDown || diveDown || rightDown) && !this.maskKeys) {
     this.frog = new LD29.Frog();
     this.clearMessage();
@@ -150,7 +169,6 @@ LD29.prototype.ticked = function(tick) {
       var sprite2 = this.sprites[jj];
       var sprite2Pos = [sprite2.modelview[12], sprite2.modelview[13], sprite2.modelview[14]];
       if (vec3.distance(sprite1Pos, sprite2Pos) < 2.0) {
-        console.log(sprite1, sprite2);
         sprite1.collide(sprite2, sprite1Pos, sprite2Pos, this.tick);
         sprite2.collide(sprite1, sprite2Pos, sprite1Pos, this.tick);
       }
