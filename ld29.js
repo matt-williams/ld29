@@ -21,7 +21,7 @@ LD29.prototype.initRenderers = function() {
   this.matrix = mat4.create();
   this.sprite3dRenderer = new LD.Sprite3DRenderer(this.gl);
   LD.Sprite3D.init(this.sprite3dRenderer);
-  this.surfaceRenderer = new LD.SurfaceRenderer(this.gl);
+  this.surfaceRenderer = new LD.SurfaceRenderer(this.gl, LD29.PLAY_AREA);
   LD29.Duck.init(this.gl);
   LD29.Treasure.init(this.gl);
   LD29.Plant.init(this.gl);
